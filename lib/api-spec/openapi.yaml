@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: jobs
+    description: Swedish job-search sources and listings
 paths:
   /healthz:
     get:
@@ -24,6 +26,68 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /jobs/sources:
+    get:
+      operationId: listJobSources
+      tags: [jobs]
+      summary: List supported Swedish job sources
+      responses:
+        "200":
+          description: Supported job sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/JobSource"
+  /jobs/search:
+    post:
+      operationId: searchJobs
+      tags: [jobs]
+      summary: Search selected Swedish job sources
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobSearchInput"
+      responses:
+        "200":
+          description: Job listings and per-source status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobSearchResult"
+        "400":
+          description: Invalid search filters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /jobs/resume-import:
+    post:
+      operationId: importResume
+      tags: [jobs]
+      summary: Extract text from an uploaded CV without retaining the file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ResumeUploadInput"
+      responses:
+        "200":
+          description: Extracted text for the user to review and edit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumeImportResult"
+        "400":
+          description: Unsupported or unreadable file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +97,162 @@ components:
           type: string
       required:
         - status
+    JobSource:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [jobsearch, job-ad-links, custom-feed]
+        name:
+          type: string
+        description:
+          type: string
+        contentNote:
+          type: ["string", "null"]
+      required: [id, name, description, contentNote]
+    JobSearchInput:
+      type: object
+      properties:
+        query:
+          type: string
+          maxLength: 200
+        location:
+          type: string
+          maxLength: 120
+        sourceIds:
+          type: array
+          items:
+            type: string
+            enum: [jobsearch, job-ad-links, custom-feed]
+          default: [jobsearch, job-ad-links]
+        customFeedUrls:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            format: uri
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 30
+    JobSearchResult:
+      type: object
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobListing"
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobSourceResult"
+        refreshedAt:
+          type: string
+          format: date-time
+        partial:
+          type: boolean
+      required: [jobs, sources, refreshedAt, partial]
+    JobListing:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        employer:
+          type: ["string", "null"]
+        location:
+          type: ["string", "null"]
+        sourceIds:
+          type: array
+          items:
+            type: string
+        sourceNames:
+          type: array
+          items:
+            type: string
+        sourceUrl:
+          type: string
+          format: uri
+        description:
+          type: string
+        requirements:
+          type: array
+          items:
+            type: string
+        skills:
+          type: array
+          items:
+            type: string
+        experienceRequirement:
+          type: ["string", "null"]
+        publishedAt:
+          type: ["string", "null"]
+          format: date-time
+        deadline:
+          type: ["string", "null"]
+          format: date-time
+        employmentType:
+          type: ["string", "null"]
+        contentDepth:
+          type: string
+          enum: [full, excerpt]
+      required:
+        - id
+        - title
+        - employer
+        - location
+        - sourceIds
+        - sourceNames
+        - sourceUrl
+        - description
+        - requirements
+        - skills
+        - experienceRequirement
+        - publishedAt
+        - deadline
+        - employmentType
+        - contentDepth
+    JobSourceResult:
+      type: object
+      properties:
+        sourceId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [success, failed, skipped]
+        resultCount:
+          type: integer
+        message:
+          type: ["string", "null"]
+      required: [sourceId, name, status, resultCount, message]
+    ResumeUploadInput:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+      required: [file]
+    ResumeImportResult:
+      type: object
+      properties:
+        filename:
+          type: string
+        extractedText:
+          type: string
+        wordCount:
+          type: integer
+        retained:
+          type: boolean
+          enum: [false]
+      required: [filename, extractedText, wordCount, retained]
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
 

@@ -26,3 +26,26 @@ to = "/index.html"
 [services.env]
 PORT = "19478"
 BASE_PATH = "/"
+
+[[services]]
+name = "job-api"
+paths = [ "/api/jobs" ]
+localPort = 19479
+
+[services.development]
+run = "mvn -f server/pom.xml spring-boot:run"
+
+[services.production.build]
+args = [ "mvn", "-f", "server/pom.xml", "-DskipTests", "package" ]
+
+[services.production.run]
+args = [ "java", "-jar", "server/target/sweden-job-search-server.jar" ]
+
+[services.production.run.env]
+PORT = "19479"
+
+[services.env]
+PORT = "19479"
+
+[services.health.startup]
+path = "/api/jobs/sources"
