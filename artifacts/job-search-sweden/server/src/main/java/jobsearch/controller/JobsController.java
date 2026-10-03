@@ -1,4 +1,4 @@
-package se.jobsearch.controller;
+package jobsearch.controller;
 
 import java.io.IOException;
 import java.util.List;
@@ -9,12 +9,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-import se.jobsearch.model.JobSearchInput;
-import se.jobsearch.model.JobSearchResult;
-import se.jobsearch.model.JobSource;
-import se.jobsearch.model.ResumeImportResult;
-import se.jobsearch.service.JobSearchService;
-import se.jobsearch.service.ResumeTextExtractor;
+import jobsearch.model.JobSearchInput;
+import jobsearch.model.JobSearchResult;
+import jobsearch.model.JobSource;
+import jobsearch.model.ResumeImportResult;
+import jobsearch.service.JobSearchService;
+import jobsearch.service.ResumeTextExtractor;
 import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController

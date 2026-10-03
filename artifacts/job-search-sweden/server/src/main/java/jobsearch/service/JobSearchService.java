@@ -1,4 +1,4 @@
-package se.jobsearch.service;
+package jobsearch.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,11 +19,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
-import se.jobsearch.model.JobListing;
-import se.jobsearch.model.JobSearchInput;
-import se.jobsearch.model.JobSearchResult;
-import se.jobsearch.model.JobSource;
-import se.jobsearch.model.JobSourceResult;
+import jobsearch.model.JobListing;
+import jobsearch.model.JobSearchInput;
+import jobsearch.model.JobSearchResult;
+import jobsearch.model.JobSource;
+import jobsearch.model.JobSourceResult;
 
 @Service
 public class JobSearchService {

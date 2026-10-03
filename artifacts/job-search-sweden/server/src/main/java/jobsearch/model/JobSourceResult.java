@@ -1,4 +1,4 @@
-package se.jobsearch.model;
+package jobsearch.model;
 
 public record JobSourceResult(
     String sourceId,

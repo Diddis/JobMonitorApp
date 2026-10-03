@@ -1,10 +1,10 @@
-package se.jobsearch.controller;
+package jobsearch.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import se.jobsearch.model.ApiError;
+import jobsearch.model.ApiError;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {

@@ -1,4 +1,4 @@
-package se.jobsearch.service;
+package jobsearch.service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
@@ -25,7 +25,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
-import se.jobsearch.model.JobListing;
+import jobsearch.model.JobListing;
 
 @Service
 public class CustomFeedService {

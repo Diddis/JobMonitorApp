@@ -1,4 +1,4 @@
-package se.jobsearch.service;
+package jobsearch.service;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;

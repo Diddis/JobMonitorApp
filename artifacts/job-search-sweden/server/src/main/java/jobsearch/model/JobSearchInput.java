@@ -1,4 +1,4 @@
-package se.jobsearch.model;
+package jobsearch.model;
 
 import java.util.List;
 
