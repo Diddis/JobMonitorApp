@@ -25,6 +25,9 @@ import jobsearch.model.JobSearchResult;
 import jobsearch.model.JobSource;
 import jobsearch.model.JobSourceResult;
 
+/**
+  This class 
+**/
 @Service
 public class JobSearchService {
   private static final String JOB_SEARCH_URL = "https://jobsearch.api.jobtechdev.se/search";
@@ -34,7 +37,7 @@ public class JobSearchService {
       .followRedirects(HttpClient.Redirect.NORMAL)
       .build();
 
-  private final ObjectMapper mapper;
+  private final ObjectMapper mapper;   // Convert JSON <-> Java object
   private final CustomFeedService customFeedService;
 
   public JobSearchService(ObjectMapper mapper, CustomFeedService customFeedService) {
@@ -42,6 +45,7 @@ public class JobSearchService {
     this.customFeedService = customFeedService;
   }
 
+  // Method returns a list of job sources.
   public List<JobSource> sources() {
     return List.of(
         new JobSource(

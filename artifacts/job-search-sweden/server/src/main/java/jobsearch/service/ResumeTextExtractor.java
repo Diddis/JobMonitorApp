@@ -9,9 +9,11 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+  This class extracts text from PDF and DOCX, or just read a TXT file.
+**/
 @Service
 public class ResumeTextExtractor {
   private static final long MAX_BYTES = 5 * 1024 * 1024;
