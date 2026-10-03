@@ -69,6 +69,11 @@ public class JobSearchService {
     );
   }
 
+  /**
+  Method for ---
+  Cleans input then 
+  Parameter JobSearchInput is record of search
+  **/
   public JobSearchResult search(JobSearchInput input) {
     String query = clean(input.query());
     String location = clean(input.location());
@@ -451,6 +456,7 @@ public class JobSearchService {
     return value == null || value.isBlank() ? null : value.trim();
   }
 
+  // Helper method for returning empty string if null or trimming whitespace
   private String clean(String value) {
     return value == null ? "" : value.trim();
   }
