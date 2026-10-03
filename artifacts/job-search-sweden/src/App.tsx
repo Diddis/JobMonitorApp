@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Link, Router as WouterRouter, useLocation } from 'wouter';
 import { useImportResume, useListJobSources, useSearchJobs } from '@workspace/api-client-react';
@@ -15,12 +15,16 @@ const KEYS = {
   preferences: 'nordjobb.preferences.v1',
   profile: 'nordjobb.profile.v1',
   search: 'nordjobb.search.v1',
+  searches: 'nordjobb.searches.v1',
+  results: 'nordjobb.results.v1',
 };
 
-type Preferences = { sourceIds: string[]; feeds: string[]; refreshMinutes: number };
+type Preferences = { sourceIds: string[]; feeds: string[]; refreshMinutes: number; refreshScheduleVersion?: number };
 type Profile = { skills: string[]; evidence: Record<string, string>; cvText: string; filename: string };
 type SearchForm = { query: string; location: string };
-const DEFAULT_PREFS: Preferences = { sourceIds: ['jobsearch', 'job-ad-links'], feeds: [], refreshMinutes: 0 };
+type SavedSearch = { id: string; query: string; location: string };
+type SearchCache = Record<string, JobSearchResult>;
+const DEFAULT_PREFS: Preferences = { sourceIds: ['jobsearch', 'job-ad-links'], feeds: [], refreshMinutes: 60 };
 const DEFAULT_PROFILE: Profile = { skills: [], evidence: { experience: '', education: '', preferences: '' }, cvText: '', filename: '' };
 
 function load<T>(key: string, fallback: T): T {
@@ -31,6 +35,33 @@ function load<T>(key: string, fallback: T): T {
 }
 function save(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Storage may be unavailable. */ }
+}
+function loadPreferences(): Preferences {
+  const preferences = load(KEYS.preferences, DEFAULT_PREFS);
+  if (preferences.refreshScheduleVersion === undefined) {
+    return {
+      ...preferences,
+      refreshMinutes: preferences.refreshMinutes === 0 ? DEFAULT_PREFS.refreshMinutes : preferences.refreshMinutes,
+      refreshScheduleVersion: 1,
+    };
+  }
+  return preferences;
+}
+function initialSavedSearches(): SavedSearch[] {
+  try {
+    const existing = localStorage.getItem(KEYS.searches);
+    if (existing) {
+      const parsed = JSON.parse(existing);
+      return Array.isArray(parsed) ? parsed.filter(item => item && typeof item.id === 'string').map(item => ({
+        id: item.id, query: typeof item.query === 'string' ? item.query : '', location: typeof item.location === 'string' ? item.location : '',
+      })) : [];
+    }
+    const legacy = JSON.parse(localStorage.getItem(KEYS.search) || '{}') as Partial<SearchForm>;
+    const query = typeof legacy.query === 'string' ? legacy.query.trim() : '';
+    const location = typeof legacy.location === 'string' ? legacy.location.trim() : '';
+    const migrated = query || location ? [{ id: `search-${Date.now().toString(36)}`, query, location }] : [];
+    return migrated;
+  } catch { return []; }
 }
 function prettyDate(value?: string | null) {
   if (!value) return null;
@@ -108,91 +139,140 @@ function PageHeader({ eyebrow, title, children }: { eyebrow: string; title: stri
 function HomePage() {
   const sourcesQuery = useListJobSources();
   const searchMutation = useSearchJobs();
-  const [prefs, setPrefs] = useState<Preferences>(() => load(KEYS.preferences, DEFAULT_PREFS));
+  const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
   const [profile] = useState<Profile>(() => load(KEYS.profile, DEFAULT_PROFILE));
-  const [form, setForm] = useState<SearchForm>(() => load(KEYS.search, { query: '', location: '' }));
-  const [result, setResult] = useState<JobSearchResult | null>(null);
+  const [searches, setSearches] = useState<SavedSearch[]>(initialSavedSearches);
+  const [cache, setCache] = useState<SearchCache>(() => load(KEYS.results, {}));
+  const [draft, setDraft] = useState<SearchForm>({ query: '', location: '' });
+  const [searchStates, setSearchStates] = useState<Record<string, 'loading' | 'error'>>({});
   const [sourceError, setSourceError] = useState('');
-  const timerAction = useRef<() => void>(() => undefined);
+  const prefsRef = useRef(prefs);
+  const searchesRef = useRef(searches);
+  const mutationRef = useRef(searchMutation.mutateAsync);
+  const didInitialRun = useRef(false);
+  const inFlightSearches = useRef(new Set<string>());
+  const sourceConfigKey = JSON.stringify([prefs.sourceIds, prefs.feeds]);
+  const sourceConfigRef = useRef(sourceConfigKey);
   const sources = (sourcesQuery.data ?? []) as JobSource[];
 
-  const runSearch = useCallback(() => {
-    const sourceIds = [...prefs.sourceIds];
-    if (prefs.feeds.length && !sourceIds.includes('custom-feed')) sourceIds.push('custom-feed');
+  prefsRef.current = prefs;
+  searchesRef.current = searches;
+  mutationRef.current = searchMutation.mutateAsync;
+
+  const runSearch = async (search: SavedSearch) => {
+    if (inFlightSearches.current.has(search.id)) return;
+    inFlightSearches.current.add(search.id);
+    const currentPrefs = prefsRef.current;
+    const sourceIds = [...currentPrefs.sourceIds];
+    if (currentPrefs.feeds.length && !sourceIds.includes('custom-feed')) sourceIds.push('custom-feed');
     if (!sourceIds.length) {
       setSourceError('Choose at least one source in Search settings before searching.');
+      setSearchStates(old => ({ ...old, [search.id]: 'error' }));
+      inFlightSearches.current.delete(search.id);
       return;
     }
     setSourceError('');
-    searchMutation.mutate({ data: {
-      query: form.query.trim() || undefined,
-      location: form.location.trim() || undefined,
+    setSearchStates(old => ({ ...old, [search.id]: 'loading' }));
+    try {
+      const result = await mutationRef.current({ data: {
+        query: search.query.trim() || undefined,
+        location: search.location.trim() || undefined,
       sourceIds: sourceIds as ('jobsearch' | 'job-ad-links' | 'custom-feed')[],
-      customFeedUrls: prefs.feeds,
+      customFeedUrls: currentPrefs.feeds,
       limit: 30,
-    } }, { onSuccess: setResult });
-  }, [prefs.sourceIds, prefs.feeds, form.query, form.location, searchMutation.mutate]);
-  timerAction.current = runSearch;
+      } });
+      if (!searchesRef.current.some(item => item.id === search.id)) return;
+      setCache(old => {
+        const next = { ...old, [search.id]: result };
+        return next;
+      });
+      setSearchStates(old => { const next = { ...old }; delete next[search.id]; return next; });
+    } catch {
+      if (searchesRef.current.some(item => item.id === search.id)) setSearchStates(old => ({ ...old, [search.id]: 'error' }));
+    } finally {
+      inFlightSearches.current.delete(search.id);
+    }
+  };
+  const runAllSearches = () => searchesRef.current.forEach(search => { void runSearch(search); });
 
   useEffect(() => {
     save(KEYS.preferences, prefs);
   }, [prefs]);
-  useEffect(() => { save(KEYS.search, form); }, [form]);
+  useEffect(() => { save(KEYS.searches, searches); }, [searches]);
+  useEffect(() => { save(KEYS.results, cache); }, [cache]);
   useEffect(() => {
-    if (prefs.refreshMinutes > 0) {
-      const timer = window.setInterval(() => timerAction.current(), prefs.refreshMinutes * 60_000);
-      return () => window.clearInterval(timer);
+    if (!didInitialRun.current) {
+      didInitialRun.current = true;
+      runAllSearches();
     }
+    const onVisible = () => { if (document.visibilityState === 'visible') runAllSearches(); };
+    document.addEventListener('visibilitychange', onVisible);
+    if (prefs.refreshMinutes > 0) {
+      const timer = window.setInterval(runAllSearches, prefs.refreshMinutes * 60_000);
+      return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+    }
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [prefs.refreshMinutes]);
+  useEffect(() => {
+    if (sourceConfigRef.current !== sourceConfigKey) {
+      sourceConfigRef.current = sourceConfigKey;
+      runAllSearches();
+    }
+  }, [sourceConfigKey]);
 
-  const onSubmit = (event: FormEvent) => { event.preventDefault(); runSearch(); };
-  const sourceStatus = result?.sources ?? [];
-  const failedSources = sourceStatus.filter(source => source.status === 'failed');
-  const matched = useMemo(() => result?.jobs.map(job => ({ job, comparison: compareJob(job, profile) })) ?? [], [result, profile]);
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const query = draft.query.trim();
+    const location = draft.location.trim();
+    if (!query && !location) return;
+    const search = { id: `search-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, query, location };
+    setSearches(old => [...old, search]);
+    searchesRef.current = [...searchesRef.current, search];
+    setDraft({ query: '', location: '' });
+    void runSearch(search);
+  };
+  const removeSearch = (search: SavedSearch) => {
+    if (!window.confirm(`Remove “${search.query || search.location}” and its cached results?`)) return;
+    setSearches(old => old.filter(item => item.id !== search.id));
+    searchesRef.current = searchesRef.current.filter(item => item.id !== search.id);
+    setCache(old => {
+      const next = { ...old }; delete next[search.id]; return next;
+    });
+    setSearchStates(old => { const next = { ...old }; delete next[search.id]; return next; });
+  };
 
   return <>
-    <PageHeader eyebrow="A search that fits you" title="Find work that feels right.">Set a few useful boundaries, then search Swedish job sources on your terms. Your profile helps you compare matches here, on your device only.</PageHeader>
-    <div className="home-grid">
-      <section className="panel search-panel">
-        <div className="panel-heading"><div><h2 className="panel-title">Shape your search</h2><p className="panel-sub">A role, a place, or simply start broad.</p></div><div className="eyebrow">01 / SEARCH</div></div>
-        <form onSubmit={onSubmit}>
-          <div className="field-grid">
-            <div className="field"><label htmlFor="search-query">Role or keywords</label><input id="search-query" className="control" data-testid="input-search-query" maxLength={200} placeholder="e.g. service designer, fysioterapeut" value={form.query} onChange={e => setForm({ ...form, query: e.target.value })} /></div>
-            <div className="field"><label htmlFor="search-location">Location</label><input id="search-location" className="control" data-testid="input-search-location" maxLength={120} placeholder="e.g. Malmö, remote, Västra Götaland" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} /></div>
-          </div>
-          {sourceError && <div className="alert" role="alert" data-testid="status-search-config">{sourceError}</div>}
-          {searchMutation.isError && <div className="alert" role="alert" data-testid="status-search-error">The search could not be completed. Check your connection and try again.</div>}
-          <div className="search-actions"><span className="hint">Searching sends only these keywords, location, and chosen sources.</span><button className="button" type="submit" data-testid="button-search" disabled={searchMutation.isPending}><Search size={15} />{searchMutation.isPending ? 'Looking…' : 'Find matches'}</button></div>
-        </form>
-      </section>
-
-      <aside className="panel sidebar-panel">
-        <h2 className="side-panel-title">Sources in your search</h2>
-        {sourcesQuery.isLoading && <div className="loading-lines" aria-label="Loading sources"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div>}
-        {sourcesQuery.isError && <div className="alert" role="alert"><CircleAlert size={14} /> Sources could not load. <button className="job-link" onClick={() => sourcesQuery.refetch()} data-testid="button-retry-sources">Try again</button></div>}
-        {sources.map(source => <label className="source-row switch-label" key={source.id}>
-          <span><span className="source-name">{source.name}</span><span className="source-desc">{source.description}</span></span>
-          <input className="switch" type="checkbox" aria-label={`Include ${source.name}`} data-testid={`toggle-source-${source.id}`} checked={prefs.sourceIds.includes(source.id)} onChange={e => setPrefs(previous => ({ ...previous, sourceIds: e.target.checked ? [...previous.sourceIds, source.id] : previous.sourceIds.filter(id => id !== source.id) }))} />
-        </label>)}
-        {!sourcesQuery.isLoading && !sourcesQuery.isError && !sources.length && <div className="state-box"><p>No sources are available right now.</p></div>}
-        {prefs.feeds.length > 0 && <div className="source-row"><span><span className="source-name">Your RSS / Atom feeds</span><span className="source-desc">{prefs.feeds.length} added in settings</span></span><span className="source-count"><Rss size={14} /></span></div>}
-        <div className="footnote">Refresh {prefs.refreshMinutes ? `every ${prefs.refreshMinutes} minutes` : 'manually'} · <Link href="/settings" className="job-link" data-testid="link-edit-sources">Manage sources <ArrowRight size={12} /></Link></div>
-      </aside>
-    </div>
-
-    <section>
-      <div className="results-head">
-        <div><h2>Your matches</h2><div className="results-meta" data-testid="text-last-refreshed">{result ? `${result.jobs.length} found · ${timeSince(result.refreshedAt)}` : timeSince()}</div></div>
-        <button type="button" className="button quiet small" onClick={runSearch} disabled={searchMutation.isPending} data-testid="button-refresh"><RefreshCw size={14} className={searchMutation.isPending ? 'animate-spin' : ''} />Refresh now</button>
+    <PageHeader eyebrow="Your searches, already at work" title="A little closer to the right role.">Your saved searches gather fresh Swedish opportunities here. Matches stay on this device between visits, and your profile comparisons happen locally.</PageHeader>
+    <section className="saved-results" aria-label="Saved search results">
+      <div className="results-head results-head-main">
+        <div><h2>Your matches</h2><div className="results-meta" data-testid="text-last-refreshed">{searches.length ? `${searches.length} saved ${searches.length === 1 ? 'search' : 'searches'} · ${prefs.refreshMinutes ? `refreshes every ${prefs.refreshMinutes} min` : 'manual refresh'}` : 'Add a search below to start gathering matches'}</div></div>
+        {searches.length > 0 && <button type="button" className="button quiet small" onClick={runAllSearches} data-testid="button-refresh"><RefreshCw size={14} />Refresh all</button>}
       </div>
-      {result?.partial && <div className="alert partial" role="status" data-testid="status-partial-results"><CircleAlert size={15} />Some sources did not return results. Available matches are shown below.</div>}
-      {failedSources.map((source, index) => <div className="alert partial" key={`${source.sourceId}-${index}`} data-testid={`status-source-failure-${source.sourceId}`}><strong>{source.name}:</strong> {source.message || 'This source could not be reached.'}</div>)}
-      {result && sourceStatus.length > 0 && <div className="results-meta" style={{ margin: '8px 0 13px' }} data-testid="text-source-summary">{sourceStatus.map(s => `${s.name}: ${s.status === 'success' ? `${s.resultCount} found` : s.status}`).join(' · ')}</div>}
-      {searchMutation.isPending && <div className="panel loading-lines" aria-label="Loading job matches"><div className="skeleton" /><div className="skeleton" style={{ width: '75%' }} /><div className="skeleton" style={{ width: '91%' }} /></div>}
-      {!result && !searchMutation.isPending && <div className="panel state-box"><div className="upload-icon" style={{ margin: '0 auto' }}><Sparkles size={19} /></div><h3>A good search starts small.</h3><p>Add the kind of work and place you have in mind. You can broaden it any time.</p></div>}
-      {result && !matched.length && !searchMutation.isPending && <div className="panel state-box"><BriefcaseBusiness size={23} /><h3>No matches this time.</h3><p>Try a broader title or a nearby location, or include another source.</p><button className="button secondary small" onClick={() => setForm({ query: '', location: '' })} data-testid="button-clear-search">Clear search terms</button></div>}
-      <div className="job-list">
-        {!searchMutation.isPending && matched.map(({ job, comparison }, index) => <article className="panel job-card" key={`${job.id}-${index}`} data-testid={`card-job-${job.id}`} style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}>
+      {sourceError && <div className="alert" role="alert" data-testid="status-search-config">{sourceError}</div>}
+      {!searches.length && <div className="panel state-box"><div className="upload-icon" style={{ margin: '0 auto' }}><Sparkles size={19} /></div><h3>Your first search sets the rhythm.</h3><p>Add a role, a place, or both below. Your latest matches will be ready here when you return.</p></div>}
+      {searches.map((search, searchIndex) => {
+        const result = cache[search.id];
+        const matched = result?.jobs.map(job => ({ job, comparison: compareJob(job, profile) })) ?? [];
+        const sourceStatus = result?.sources ?? [];
+        const failedSources = sourceStatus.filter(source => source.status === 'failed');
+        const label = [search.query, search.location].filter(Boolean).join(' · ') || 'Broad search';
+        return <section className="search-result-group" key={search.id} data-testid={`group-search-${search.id}`}>
+          <div className="saved-search-heading">
+            <div><div className="eyebrow">SAVED SEARCH {String(searchIndex + 1).padStart(2, '0')}</div><h3>{label}</h3><div className="results-meta" data-testid={`text-search-refreshed-${search.id}`}>{result ? `${result.jobs.length} opportunities · ${timeSince(result.refreshedAt)}` : searchStates[search.id] === 'loading' ? 'First search in progress' : 'No cached results yet'}</div></div>
+            <div className="saved-search-actions">
+              {searchStates[search.id] === 'loading' && <span className="refresh-state"><RefreshCw size={13} className="refresh-turn" /> Updating</span>}
+              <button type="button" className="button quiet small" onClick={() => void runSearch(search)} data-testid={`button-refresh-search-${search.id}`}><RefreshCw size={13} />Refresh</button>
+              <button type="button" className="icon-action remove-search" aria-label={`Remove search ${label}`} onClick={() => removeSearch(search)} data-testid={`button-remove-search-${search.id}`}><Trash2 size={14} /></button>
+            </div>
+          </div>
+          {searchStates[search.id] === 'error' && <div className="alert partial" role="status" data-testid={`status-search-error-${search.id}`}>{result ? 'This refresh could not finish. Your last successful results are still here.' : 'This search could not be completed. Check your connection and try again.'}</div>}
+          {result?.partial && <div className="alert partial" role="status" data-testid={`status-partial-results-${search.id}`}><CircleAlert size={15} />Some sources did not return results. Available matches are shown below.</div>}
+          {failedSources.map((source, index) => <div className="alert partial" key={`${source.sourceId}-${index}`} data-testid={`status-source-failure-${search.id}-${source.sourceId}`}><strong>{source.name}:</strong> {source.message || 'This source could not be reached.'}</div>)}
+          {result && sourceStatus.length > 0 && <div className="results-meta source-summary" data-testid={`text-source-summary-${search.id}`}>{sourceStatus.map(s => `${s.name}: ${s.status === 'success' ? `${s.resultCount} found` : s.status}`).join(' · ')}</div>}
+          {!result && searchStates[search.id] === 'loading' && <div className="panel loading-lines" aria-label={`Loading matches for ${label}`}><div className="skeleton" /><div className="skeleton" style={{ width: '75%' }} /><div className="skeleton" style={{ width: '91%' }} /></div>}
+          {result && !matched.length && <div className="panel state-box"><BriefcaseBusiness size={23} /><h3>No matches in this refresh.</h3><p>Try broadening this search or including another source in settings.</p></div>}
+          <div className="job-list">
+        {matched.map(({ job, comparison }, index) => <article className="panel job-card" key={`${job.id}-${index}`} data-testid={`card-job-${search.id}-${job.id}`} style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}>
           <div className="job-top"><div><h3 className="job-title">{job.title}</h3><div className="job-company">{job.employer || 'Employer not listed'}</div></div><div className="match-score" title="Compared locally against the requirements provided by the source, or keyword overlap when those requirements are unavailable."><b>{comparison.score}%</b> {comparison.scoreBasis === 'requirements' ? 'requirements' : 'keyword overlap'}</div></div>
           <div className="job-meta">
             {job.location && <span><MapPin size={13} />{job.location}</span>}
@@ -202,11 +282,11 @@ function HomePage() {
           </div>
           <p className="job-description">{job.description}</p>
           {job.skills.length > 0 && <div className="tag-row" aria-label="Skills and keyword comparison">{job.skills.slice(0, 9).map((skill, i) => <span className={`tag ${comparison.matches.some(match => match === skill.toLowerCase()) ? 'matched' : ''}`} key={`${skill}-${i}`} title={comparison.matches.some(match => match === skill.toLowerCase()) ? 'Also present in your profile' : 'Keyword from listing'}>{skill}</span>)}</div>}
-          {profile.skills.length > 0 && <div className="results-meta" style={{ marginTop: 10 }} data-testid={`text-comparison-${job.id}`}>{comparison.matches.length ? `In common: ${comparison.matches.slice(0, 6).join(', ')}` : 'No profile keywords found in this listing.'} · Browser comparison</div>}
-          {comparison.requirements.length > 0 ? <div className="requirement-breakdown" data-testid={`list-requirements-${job.id}`}>
+          {profile.skills.length > 0 && <div className="results-meta" style={{ marginTop: 10 }} data-testid={`text-comparison-${search.id}-${job.id}`}>{comparison.matches.length ? `In common: ${comparison.matches.slice(0, 6).join(', ')}` : 'No profile keywords found in this listing.'} · Browser comparison</div>}
+          {comparison.requirements.length > 0 ? <div className="requirement-breakdown" data-testid={`list-requirements-${search.id}-${job.id}`}>
             <h4>Requirement check <span>{comparison.requirements.filter(item => item.matched).length} of {comparison.requirements.length} found</span></h4>
             <div className="requirement-list">
-              {comparison.requirements.slice(0, 8).map((item, requirementIndex) => <div className={`requirement-item ${item.matched ? 'matched' : ''}`} key={`${item.label}-${requirementIndex}`} data-testid={`requirement-${job.id}-${requirementIndex}`}>
+              {comparison.requirements.slice(0, 8).map((item, requirementIndex) => <div className={`requirement-item ${item.matched ? 'matched' : ''}`} key={`${item.label}-${requirementIndex}`} data-testid={`requirement-${search.id}-${job.id}-${requirementIndex}`}>
                 <span className="requirement-mark" aria-hidden="true">{item.matched ? '✓' : '—'}</span>
                 <span className="requirement-text">{item.label}{item.matched && item.matchedTerms.length > 0 && <small>Profile terms: {item.matchedTerms.slice(0, 4).join(', ')}</small>}</span>
                 <span className="requirement-status">{!comparison.hasProfile ? 'Add profile details' : item.matched ? 'Found in profile' : 'Not found in profile'}</span>
@@ -214,11 +294,35 @@ function HomePage() {
             </div>
             {comparison.requirements.length > 8 && <p className="requirement-note">Showing 8 of {comparison.requirements.length} listed requirements.</p>}
             <p className="requirement-note">Keyword matches are a clue, not a verdict. Review the original listing for context.</p>
-          </div> : <p className="requirement-note" data-testid={`text-requirements-unavailable-${job.id}`}>{job.contentDepth === 'excerpt' ? 'This source provides an excerpt; requirements may not be included.' : 'No structured requirements were found in this listing text.'} Review the original listing for its criteria.</p>}
-          <div className="job-foot"><span className="source-label">{job.sourceNames.join(' · ') || 'Job source'}{job.contentDepth === 'full' ? ' · Full description' : ' · Excerpt'}</span><a className="job-link" href={job.sourceUrl} target="_blank" rel="noreferrer noopener" data-testid={`link-original-job-${job.id}`}>Original listing <ExternalLink size={13} /></a></div>
+          </div> : <p className="requirement-note" data-testid={`text-requirements-unavailable-${search.id}-${job.id}`}>{job.contentDepth === 'excerpt' ? 'This source provides an excerpt; requirements may not be included.' : 'No structured requirements were found in this listing text.'} Review the original listing for its criteria.</p>}
+          <div className="job-foot"><span className="source-label">{job.sourceNames.join(' · ') || 'Job source'}{job.contentDepth === 'full' ? ' · Full description' : ' · Excerpt'}</span><a className="job-link" href={job.sourceUrl} target="_blank" rel="noreferrer noopener" data-testid={`link-original-job-${search.id}-${job.id}`}>Original listing <ExternalLink size={13} /></a></div>
         </article>)}
-      </div>
+          </div>
+        </section>;
+      })}
     </section>
+    <section className="panel search-panel add-search-panel">
+      <div className="panel-heading"><div><div className="eyebrow">{searches.length ? 'ADD ANOTHER SEARCH' : 'START YOUR SEARCHES'}</div><h2 className="panel-title">{searches.length ? 'Keep another possibility close.' : 'Set up your first saved search.'}</h2><p className="panel-sub">Each search uses your shared source and feed settings.</p></div><div className="add-search-mark"><Plus size={17} /></div></div>
+      <form onSubmit={onSubmit}>
+        <div className="field-grid">
+          <div className="field"><label htmlFor="search-query">Role or keywords</label><input id="search-query" className="control" data-testid="input-search-query" maxLength={200} placeholder="e.g. service designer, fysioterapeut" value={draft.query} onChange={e => setDraft({ ...draft, query: e.target.value })} /></div>
+          <div className="field"><label htmlFor="search-location">Location</label><input id="search-location" className="control" data-testid="input-search-location" maxLength={120} placeholder="e.g. Malmö, remote, Västra Götaland" value={draft.location} onChange={e => setDraft({ ...draft, location: e.target.value })} /></div>
+        </div>
+        <div className="search-actions"><span className="hint">Only these keywords, location, and chosen sources are sent when searching.</span><button className="button" type="submit" data-testid="button-search" disabled={!draft.query.trim() && !draft.location.trim()}><Plus size={15} />Save &amp; find matches</button></div>
+      </form>
+    </section>
+    <aside className="panel sidebar-panel home-source-panel">
+      <div className="source-panel-head"><div><div className="eyebrow">SHARED ACROSS SEARCHES</div><h2 className="side-panel-title">Sources in your searches</h2></div><Link href="/settings" className="job-link" data-testid="link-edit-sources">Manage <ArrowRight size={12} /></Link></div>
+      {sourcesQuery.isLoading && <div className="loading-lines" aria-label="Loading sources"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div>}
+      {sourcesQuery.isError && <div className="alert" role="alert"><CircleAlert size={14} /> Sources could not load. <button className="job-link" onClick={() => sourcesQuery.refetch()} data-testid="button-retry-sources">Try again</button></div>}
+      {sources.map(source => <label className="source-row switch-label" key={source.id}>
+        <span><span className="source-name">{source.name}</span><span className="source-desc">{source.description}</span></span>
+        <input className="switch" type="checkbox" aria-label={`Include ${source.name}`} data-testid={`toggle-source-${source.id}`} checked={prefs.sourceIds.includes(source.id)} onChange={e => setPrefs(previous => ({ ...previous, sourceIds: e.target.checked ? [...previous.sourceIds, source.id] : previous.sourceIds.filter(id => id !== source.id) }))} />
+      </label>)}
+      {!sourcesQuery.isLoading && !sourcesQuery.isError && !sources.length && <div className="state-box"><p>No sources are available right now.</p></div>}
+      {prefs.feeds.length > 0 && <div className="source-row"><span><span className="source-name">Your RSS / Atom feeds</span><span className="source-desc">{prefs.feeds.length} added in settings</span></span><span className="source-count"><Rss size={14} /></span></div>}
+      <div className="footnote">Refresh {prefs.refreshMinutes ? `every ${prefs.refreshMinutes} minutes` : 'manually'} · schedule and feeds are shared across every saved search.</div>
+    </aside>
   </>;
 }
 
@@ -292,7 +396,7 @@ function ProfilePage() {
 
 function SettingsPage() {
   const sourcesQuery = useListJobSources();
-  const [prefs, setPrefs] = useState<Preferences>(() => load(KEYS.preferences, DEFAULT_PREFS));
+  const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
   const [feedInput, setFeedInput] = useState('');
   const [feedError, setFeedError] = useState('');
   useEffect(() => { save(KEYS.preferences, prefs); }, [prefs]);
@@ -333,7 +437,7 @@ function SettingsPage() {
     <section className="panel settings-section">
       <h2>Refresh schedule</h2><p>Automatic refreshes run while this page is open. You can always refresh manually from your matches.</p>
       <div className="radio-row" role="radiogroup" aria-label="Automatic refresh interval">
-        {refreshChoices.map(choice => <label className="radio-option" key={choice.value}><input type="radio" name="refresh-interval" value={choice.value} checked={prefs.refreshMinutes === choice.value} onChange={() => setPrefs(old => ({ ...old, refreshMinutes: choice.value }))} data-testid={`radio-refresh-${choice.value}`} /><span>{choice.label}</span></label>)}
+        {refreshChoices.map(choice => <label className="radio-option" key={choice.value}><input type="radio" name="refresh-interval" value={choice.value} checked={prefs.refreshMinutes === choice.value} onChange={() => setPrefs(old => ({ ...old, refreshMinutes: choice.value, refreshScheduleVersion: 1 }))} data-testid={`radio-refresh-${choice.value}`} /><span>{choice.label}</span></label>)}
       </div>
       <div className="footnote"><Clock3 size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Current schedule: {prefs.refreshMinutes ? `every ${prefs.refreshMinutes} minutes while the workspace is open` : 'manual only'}.</div>
     </section>

@@ -226,6 +226,23 @@ textarea.control { resize:vertical; min-height:112px; line-height:1.6; }
 .radio-option input:checked+span { border-color:#7d9e8c; background:#e5eee4; color:#315e52; }
 .footnote { font:10px var(--app-font-mono); color:#879389; margin-top:17px; line-height:1.6; }
 .mobile-menu { display:none; }
+.saved-results { margin: 4px 0 28px; }
+.results-head-main { margin: 0 0 18px; }
+.search-result-group { margin: 0 0 25px; }
+.saved-search-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:17px 19px; margin-bottom:11px; border:1px solid #dfe5da; border-radius:14px; background:#eef1e8; }
+.saved-search-heading h3 { margin:6px 0 0; color:#31574d; font:400 23px/1.08 var(--app-font-serif); }
+.saved-search-heading .results-meta { margin-top:6px; }
+.saved-search-actions { display:flex; align-items:center; gap:8px; flex:none; }
+.refresh-state { display:inline-flex; align-items:center; gap:6px; color:#668274; font:10px var(--app-font-mono); }
+.refresh-turn { animation:refresh-rotate 1.4s linear infinite; }
+.remove-search { width:31px; height:31px; align-items:center; justify-content:center; border-radius:8px; border:1px solid #e0e2d8; background:#f8f7f0; }
+.source-summary { margin: 0 2px 11px; }
+.add-search-panel { padding:24px; margin: 3px 0 22px; }
+.add-search-mark { width:36px; height:36px; flex:none; display:grid; place-items:center; border-radius:11px; background:#e8eee5; color:#527567; }
+.home-source-panel { margin-bottom:24px; }
+.source-panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:11px; }
+.source-panel-head .side-panel-title { margin:6px 0 0; }
+@keyframes refresh-rotate { to { transform:rotate(360deg); } }
 @keyframes rise-in { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:translateY(0); } }
 @keyframes sheen { 0% { background-position:100% 0; } 100% { background-position:-100% 0; } }
 @media (max-width: 950px) {
@@ -261,4 +278,10 @@ textarea.control { resize:vertical; min-height:112px; line-height:1.6; }
  .upload-box { flex-wrap:wrap; }
  .upload-box .button { width:100%; }
  .feed-add { grid-template-columns:1fr; }
+ .saved-search-heading { align-items:flex-start; flex-direction:column; }
+ .saved-search-actions { width:100%; }
+ .saved-search-actions .button { flex:1; }
+ .add-search-panel { padding:19px; }
+ .add-search-panel .search-actions { align-items:stretch; flex-direction:column; }
+ .add-search-panel .search-actions .button { width:100%; white-space:nowrap; }
 }
