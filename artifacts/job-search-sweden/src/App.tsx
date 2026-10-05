@@ -129,7 +129,7 @@ function AppShell({ children }: { children: ReactNode }) {
   const active = location === '/' ? 'search' : location.slice(1);
   return <div className="app-frame">
     <aside className="sidebar">
-      <Link href="/" className="brand" data-testid="link-home"><span className="brand-mark">n</span><span><span className="brand-name">nordjobb</span><span className="brand-note">your work, in view</span></span></Link>
+      <Link href="/" className="brand" data-testid="link-home"><span className="brand-mark">n</span><span><span className="brand-name">nordjobb</span><span className="brand-note">job search</span></span></Link>
       <div className="nav-label">Workspace</div>
       <nav className="nav-list" aria-label="Main navigation">
         <Link href="/" className={`nav-link ${active === 'search' ? 'active' : ''}`} data-testid="link-search"><Search size={17} />Job matches</Link>
@@ -240,7 +240,7 @@ function HomePage() {
     <div className="matches-page-head">
       <h1 className="page-title">Your matches</h1>
       <div className="matches-page-actions">
-        <div className="results-meta" data-testid="text-last-refreshed">{searches.length ? `${allJobs.length} unique ${allJobs.length === 1 ? 'posting' : 'postings'} across ${searches.length} saved ${searches.length === 1 ? 'search' : 'searches'} · ${prefs.refreshMinutes ? `checks every ${prefs.refreshMinutes} min` : 'manual refresh'}` : 'No saved searches yet'}</div>
+        <div className="results-meta" data-testid="text-last-refreshed">{searches.length ? `${allJobs.length} unique ${allJobs.length === 1 ? 'posting' : 'postings'} across ${searches.length} saved ${searches.length === 1 ? 'search' : 'searches'}` : ''}</div>
         {pendingCount > 0 && <span className="refresh-state"><RefreshCw size={13} className="refresh-turn" />Checking {pendingCount}</span>}
         {searches.length > 0 && <button type="button" className="button quiet small" onClick={runAll} data-testid="button-refresh"><RefreshCw size={14} />Refresh all</button>}
       </div>
@@ -345,23 +345,23 @@ function SettingsPage() {
   const intervals = [{ value: 0, label: 'Manual only' }, { value: 15, label: '15 min' }, { value: 30, label: '30 min' }, { value: 60, label: '1 hour' }, { value: 240, label: '4 hours' }];
   const sources = (sourceQuery.data ?? []) as JobSource[];
   return <>
-    <PageHeader eyebrow="A few useful defaults" title="Search settings">Save the roles you care about. Choose shared sources and a refresh rhythm; Nordjobb checks only while the app is open.</PageHeader>
-    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">01</span><div><h2>Saved searches</h2><p>Each saved search gathers its own matches. Your source choices apply to all.</p></div></div>
+    <PageHeader eyebrow="A few useful defaults" title="Search settings">Set your search and forget it. See job openings from multiple sources in one place. </PageHeader>
+    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">01</span><div><h2>Search criteria</h2><p>Specify the search parameters that matter to you.</p></div></div>
       {searches.map((item, i) => <div className="saved-setting" key={item.id} data-testid={`row-saved-search-${item.id}`}><div className="saved-number">{String(i + 1).padStart(2, '0')}</div><div className="saved-setting-copy"><strong>{[item.query, item.location].filter(Boolean).join(' · ') || 'Broad search'}</strong><small>{item.query || 'Any role'}{item.location ? ` · ${item.location}` : ''}</small></div><button className="icon-action delete-action" type="button" aria-label={`Remove search ${item.query || item.location}`} onClick={() => removeSearch(item)} data-testid={`button-remove-search-${item.id}`}><Trash2 size={15} /></button></div>)}
       {!searches.length && <div className="inline-empty">No saved searches yet. Start with a role, a place, or both.</div>}
       <form className="add-search-form" onSubmit={addSearch}><div className="field"><label htmlFor="saved-query">Job title or keywords</label><input id="saved-query" className="control" maxLength={200} placeholder="e.g. sjuksköterska, product designer" value={draft.query} onChange={e => setDraft(d => ({ ...d, query: e.target.value }))} data-testid="input-search-query" /></div><div className="field"><label htmlFor="saved-location">Location</label><input id="saved-location" className="control" maxLength={120} placeholder="e.g. Göteborg, Skåne" value={draft.location} onChange={e => setDraft(d => ({ ...d, location: e.target.value }))} data-testid="input-search-location" /></div><button className="button add-search-button" type="submit" data-testid="button-search"><Plus size={15} />Save search</button></form>
       {error && <div className="alert" role="alert" data-testid="status-settings-error">{error}</div>}
     </section>
-    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">02</span><div><h2>Job sources</h2><p>Shared by each of your saved searches.</p></div></div>
+    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">02</span><div><h2>Job sources</h2><p>Apply your search criteria to multiple sources that list job openings.</p></div></div>
       {sourceQuery.isLoading && <div className="loading-lines"><div className="skeleton" /><div className="skeleton" /></div>}
       {sourceQuery.isError && <div className="alert" role="alert" data-testid="status-sources-error">Could not load sources. <button className="inline-button" onClick={() => sourceQuery.refetch()} data-testid="button-retry-settings-sources">Try again</button></div>}
       {sources.map(source => <label className="source-setting" key={source.id}><span><strong>{source.name}</strong><small>{source.description}{source.contentNote ? ` ${source.contentNote}` : ''}</small></span><input className="switch" type="checkbox" aria-label={`Select ${source.name}`} checked={prefs.sourceIds.includes(source.id)} onChange={e => setPrefs(p => ({ ...p, sourceIds: e.target.checked ? [...new Set([...p.sourceIds, source.id])] : p.sourceIds.filter(id => id !== source.id) }))} data-testid={`toggle-settings-source-${source.id}`} /></label>)}
       {!sourceQuery.isLoading && !sourceQuery.isError && !sources.length && <div className="inline-empty">No job sources are available right now.</div>}
     </section>
-    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">03</span><div><h2>RSS &amp; Atom feeds</h2><p>Add a source name to use as the employer when a feed entry doesn’t provide one.</p></div></div>
+    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">03</span><div><h2>RSS &amp; Atom feeds</h2><p>Add additional job sources with an RSS or Atom feed. Add a name to identify the job postings if the feed entry doesn’t provide one.</p></div></div>
       <form className="feed-add" onSubmit={addFeed}>
         <div className="field"><label htmlFor="custom-feed-url">Feed URL</label><input id="custom-feed-url" className="control" placeholder="https://organisation.se/jobs/feed.xml" value={feed} onChange={e => setFeed(e.target.value)} data-testid="input-feed-url" /></div>
-        <div className="field"><label htmlFor="custom-feed-source">Source (optional)</label><input id="custom-feed-source" className="control" maxLength={120} placeholder="Used if an item has no employer" value={feedSource} onChange={e => setFeedSource(e.target.value)} data-testid="input-feed-source" /></div>
+        <div className="field"><label htmlFor="custom-feed-source">Name (optional)</label><input id="custom-feed-source" className="control" maxLength={120} placeholder="Used if an item has no employer" value={feedSource} onChange={e => setFeedSource(e.target.value)} data-testid="input-feed-source" /></div>
         <button className="button secondary" type="submit" data-testid="button-add-feed"><Plus size={15} />Add feed</button>
       </form>
       {prefs.feeds.map((item, i) => <div className="feed-item" key={item.url}>
@@ -371,9 +371,8 @@ function SettingsPage() {
       </div>)}
       {!prefs.feeds.length && <div className="inline-empty">No custom feeds added. Built-in sources work independently.</div>}
     </section>
-    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">04</span><div><h2>Refresh schedule</h2><p>Automatic checks happen on this device while Nordjobb is open.</p></div></div>
+    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">04</span><div><h2>Refresh schedule</h2><p>Nordjobb refreshes the search only when the app is open. Set the auto refresher time schedule.</p></div></div>
       <div className="radio-row" role="radiogroup" aria-label="Automatic refresh interval">{intervals.map(choice => <label className="radio-option" key={choice.value}><input type="radio" name="refresh-interval" value={choice.value} checked={prefs.refreshMinutes === choice.value} onChange={() => setPrefs(p => ({ ...p, refreshMinutes: choice.value, refreshScheduleVersion: 1 }))} data-testid={`radio-refresh-${choice.value}`} /><span>{choice.label}</span></label>)}</div>
-      <div className="footnote"><Clock3 size={14} />{prefs.refreshMinutes ? `Checks every ${prefs.refreshMinutes} minutes while the app is open. Returning to a visible tab also refreshes.` : 'Manual refresh only.'}</div>
     </section>
     <div className="quiet-footnote"><ShieldCheck size={14} />Searches, profile details and settings are stored locally in this browser.</div>
   </>;
