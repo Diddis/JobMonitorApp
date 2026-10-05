@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Link, Router as WouterRouter, useLocation } from 'wouter';
 import { useListJobSources, useSearchJobs } from '@workspace/api-client-react';
 import type { JobListing, JobSearchInput, JobSearchResult, JobSource } from '@workspace/api-client-react';
-import { ArrowUpRight, BriefcaseBusiness, CalendarDays, CircleAlert, Clock3, MapPin, Plus, RefreshCw, Rss, Search, Settings2, ShieldCheck, Trash2, UserRound, X } from 'lucide-react';
+import { ArrowUpRight, BriefcaseBusiness, CalendarDays, ChevronDown, CircleAlert, Clock3, MapPin, Plus, RefreshCw, Rss, Search, Settings2, ShieldCheck, Trash2, UserRound, X } from 'lucide-react';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
@@ -67,6 +67,31 @@ function compareJob(job: JobListing, profile: Profile) {
   const scored = requirements.length ? Math.round(requirements.filter(x => x.found.length).length / requirements.length * 100) : (terms.size ? Math.round(overlap.length / terms.size * 100) : 0);
   return { score: scored, overlap, requirements, hasProfile: terms.size > 0, basis: requirements.length ? 'criteria' : 'keyword overlap' };
 }
+type MergedJob = { key: string; job: JobListing; savedSearches: SavedSearch[] };
+function listingKey(job: JobListing) {
+  const url = job.sourceUrl.trim().replace(/\/+$/, '').toLowerCase();
+  return url || [job.title, job.employer ?? '', job.location ?? ''].map(value => value.trim().toLowerCase()).join('|');
+}
+function mergeListings(first: JobListing, second: JobListing): JobListing {
+  const preferred = first.contentDepth === 'full' || second.contentDepth !== 'full' ? first : second;
+  const other = preferred === first ? second : first;
+  const unique = (values: string[]) => [...new Set(values.filter(Boolean))];
+  return {
+    ...preferred,
+    employer: preferred.employer || other.employer,
+    location: preferred.location || other.location,
+    sourceIds: unique([...first.sourceIds, ...second.sourceIds]),
+    sourceNames: unique([...first.sourceNames, ...second.sourceNames]),
+    sourceUrl: preferred.sourceUrl || other.sourceUrl,
+    description: preferred.description || other.description,
+    requirements: unique([...preferred.requirements, ...other.requirements]),
+    skills: unique([...preferred.skills, ...other.skills]),
+    experienceRequirement: preferred.experienceRequirement || other.experienceRequirement,
+    publishedAt: preferred.publishedAt || other.publishedAt,
+    deadline: preferred.deadline || other.deadline,
+    employmentType: preferred.employmentType || other.employmentType,
+  };
+}
 
 function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -98,6 +123,7 @@ function HomePage() {
   const [cache, setCache] = useState<SearchCache>(() => read(KEYS.results, {}));
   const [states, setStates] = useState<Record<string, 'loading' | 'error'>>({});
   const [sourceError, setSourceError] = useState('');
+  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(() => new Set());
   const searchRef = useRef(searches);
   const prefsRef = useRef(prefs);
   const mutateRef = useRef(searchMutation.mutateAsync);
@@ -134,44 +160,74 @@ function HomePage() {
   }, [prefs.refreshMinutes]);
   useEffect(() => { save(KEYS.searches, searches); }, [searches]);
 
+  const merged = new Map<string, MergedJob>();
+  for (const search of searches) {
+    for (const job of cache[search.id]?.jobs ?? []) {
+      const key = listingKey(job);
+      const existing = merged.get(key);
+      if (existing) {
+        existing.job = mergeListings(existing.job, job);
+        if (!existing.savedSearches.some(item => item.id === search.id)) existing.savedSearches.push(search);
+      } else {
+        merged.set(key, { key, job, savedSearches: [search] });
+      }
+    }
+  }
+  const allJobs = [...merged.values()].sort((a, b) => {
+    const aDate = a.job.publishedAt ? Date.parse(a.job.publishedAt) : 0;
+    const bDate = b.job.publishedAt ? Date.parse(b.job.publishedAt) : 0;
+    return (Number.isFinite(bDate) ? bDate : 0) - (Number.isFinite(aDate) ? aDate : 0);
+  });
+  const pendingCount = searches.filter(search => states[search.id] === 'loading').length;
+  const failedSearches = searches.filter(search => states[search.id] === 'error');
+  const failedSources = [...new Set(searches.flatMap(search => (cache[search.id]?.sources ?? [])
+    .filter(source => source.status === 'failed')
+    .map(source => `${source.name}${source.message ? `: ${source.message}` : ''}`)))];
+
   return <>
     <div className="matches-page-head">
       <h1 className="page-title">Your matches</h1>
       <div className="matches-page-actions">
-        <div className="results-meta" data-testid="text-last-refreshed">{searches.length ? `${searches.length} saved ${searches.length === 1 ? 'search' : 'searches'} · ${prefs.refreshMinutes ? `checks every ${prefs.refreshMinutes} min` : 'manual refresh'}` : 'No saved searches yet'}</div>
+        <div className="results-meta" data-testid="text-last-refreshed">{searches.length ? `${allJobs.length} unique ${allJobs.length === 1 ? 'posting' : 'postings'} across ${searches.length} saved ${searches.length === 1 ? 'search' : 'searches'} · ${prefs.refreshMinutes ? `checks every ${prefs.refreshMinutes} min` : 'manual refresh'}` : 'No saved searches yet'}</div>
+        {pendingCount > 0 && <span className="refresh-state"><RefreshCw size={13} className="refresh-turn" />Checking {pendingCount}</span>}
         {searches.length > 0 && <button type="button" className="button quiet small" onClick={runAll} data-testid="button-refresh"><RefreshCw size={14} />Refresh all</button>}
       </div>
     </div>
-    <section aria-label="Saved search results">
+    <section aria-label="All job postings">
       {sourceError && <div className="alert" role="alert" data-testid="status-search-config">{sourceError} <Link href="/settings" className="inline-link">Open settings</Link></div>}
+      {failedSearches.length > 0 && <div className="alert partial" role="status" data-testid="status-search-errors"><CircleAlert size={15} />Could not refresh: {failedSearches.map(search => [search.query, search.location].filter(Boolean).join(' · ') || 'Broad search').join('; ')}. Cached postings remain visible where available.</div>}
+      {failedSources.length > 0 && <div className="alert partial" role="status" data-testid="status-source-errors"><CircleAlert size={15} />Some sources could not return results: {failedSources.slice(0, 3).join(' · ')}{failedSources.length > 3 ? ` · and ${failedSources.length - 3} more` : ''}</div>}
       {!searches.length && <div className="panel state-box"><div className="empty-symbol"><Search size={19} /></div><h3>Your searches will appear here.</h3><p>Add a job title and location in Search settings. New opportunities will be gathered automatically while Nordjobb is open.</p><Link href="/settings" className="button">Set up a search</Link></div>}
-      {searches.map((search, searchIndex) => {
-        const result = cache[search.id];
-        const jobs = result?.jobs.map(job => ({ job, comparison: compareJob(job, profile) })) ?? [];
-        const label = [search.query, search.location].filter(Boolean).join(' · ') || 'Broad search';
-        const failures = result?.sources.filter(source => source.status === 'failed') ?? [];
-        return <section className="search-result-group" key={search.id} data-testid={`group-search-${search.id}`}>
-          <div className="saved-search-heading"><div><div className="eyebrow">SAVED SEARCH {String(searchIndex + 1).padStart(2, '0')}</div><h3>{label}</h3><div className="results-meta" data-testid={`text-search-refreshed-${search.id}`}>{result ? `${result.jobs.length} opportunities · checked ${timeLabel(result.refreshedAt)}` : states[search.id] === 'loading' ? 'Gathering your first results' : 'No cached results yet'}</div></div>
-            <div className="saved-search-actions">{states[search.id] === 'loading' && <span className="refresh-state"><RefreshCw size={13} className="refresh-turn" />Updating</span>}<button type="button" className="button quiet small" onClick={() => void runSearch(search)} data-testid={`button-refresh-search-${search.id}`}><RefreshCw size={13} />Refresh</button></div>
-          </div>
-          {states[search.id] === 'error' && <div className="alert partial" role="status" data-testid={`status-search-error-${search.id}`}>{result ? 'Refresh failed. Your last successful matches are still available.' : 'Search could not finish. Check your connection and try again.'}</div>}
-          {result?.partial && <div className="alert partial" role="status" data-testid={`status-partial-results-${search.id}`}><CircleAlert size={15} />Some sources could not return results. Available listings are shown.</div>}
-          {failures.map((source, i) => <div className="alert partial" key={`${source.sourceId}-${i}`} data-testid={`status-source-failure-${search.id}-${source.sourceId}`}><strong>{source.name}:</strong> {source.message || 'This source could not be reached.'}</div>)}
-          {result && result.sources.length > 0 && <div className="results-meta source-summary" data-testid={`text-source-summary-${search.id}`}>{result.sources.map(s => `${s.name}: ${s.status === 'success' ? `${s.resultCount} found` : s.status}`).join(' · ')}</div>}
-          {!result && states[search.id] === 'loading' && <div className="panel loading-lines" aria-label={`Loading matches for ${label}`}><div className="skeleton" /><div className="skeleton" /><div className="skeleton" style={{ width: '72%' }} /></div>}
-          {result && !jobs.length && <div className="panel state-box"><div className="empty-symbol"><BriefcaseBusiness size={19} /></div><h3>No opportunities in this refresh.</h3><p>Try broadening this saved search or enabling another source in settings.</p><button className="button quiet small" onClick={() => void runSearch(search)}>Try again</button></div>}
-          <div className="job-list">{jobs.map(({ job, comparison }, index) => <article className="panel job-card" key={`${job.id}-${index}`} data-testid={`card-job-${search.id}-${job.id}`} style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}>
-            <div className="job-top"><div><h3 className="job-title">{job.title}</h3><div className="job-company">{job.employer || 'Employer not listed'}</div></div><div className="match-score" title="Compared locally with your skills and education"><b>{comparison.score}%</b><span>{comparison.basis}</span></div></div>
-            <div className="job-meta">{job.location && <span><MapPin size={13} />{job.location}</span>}{job.employmentType && <span><BriefcaseBusiness size={13} />{job.employmentType}</span>}{job.publishedAt && <span><CalendarDays size={13} />Published {dateLabel(job.publishedAt)}</span>}<span><Clock3 size={13} />Deadline {dateLabel(job.deadline)}</span></div>
-            <p className="job-description">{job.description}</p>
+      {searches.length > 0 && allJobs.length === 0 && pendingCount > 0 && <div className="panel loading-lines" aria-label="Loading job postings"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" style={{ width: '72%' }} /></div>}
+      {searches.length > 0 && allJobs.length === 0 && pendingCount === 0 && <div className="panel state-box"><div className="empty-symbol"><BriefcaseBusiness size={19} /></div><h3>No postings yet.</h3><p>Results from all your saved searches will appear together here.</p><button className="button quiet small" onClick={runAll}>Try again</button></div>}
+      {allJobs.length > 0 && <div className="job-list">{allJobs.map(({ key, job, savedSearches }, index) => {
+        const comparison = compareJob(job, profile);
+        const isExpanded = expandedJobs.has(key);
+        const detailId = `job-details-${index}`;
+        return <article className={`panel job-card ${isExpanded ? 'expanded' : ''}`} key={key} data-testid={`card-job-${index}`} style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}>
+          <button className="job-card-toggle" type="button" aria-expanded={isExpanded} aria-controls={detailId} aria-label={`${isExpanded ? 'Hide' : 'Show'} details for ${job.title}`} onClick={() => setExpandedJobs(current => { const next = new Set(current); isExpanded ? next.delete(key) : next.add(key); return next; })}>
+            <span className="job-top"><span className="job-heading-copy"><span className="job-title" role="heading" aria-level={2}>{job.title}</span><span className="job-company">{job.employer || 'Employer not listed'}</span></span><span className="job-expand-cue">{isExpanded ? 'Hide details' : 'View details'}<ChevronDown size={15} aria-hidden="true" /></span></span>
+            <span className="job-preview">{job.description || 'No description is available from this source.'}</span>
+            <span className="job-meta">{job.location && <span><MapPin size={13} />{job.location}</span>}{job.employmentType && <span><BriefcaseBusiness size={13} />{job.employmentType}</span>}{job.publishedAt && <span><CalendarDays size={13} />Published {dateLabel(job.publishedAt)}</span>}<span><Clock3 size={13} />Deadline {dateLabel(job.deadline)}</span></span>
+          </button>
+          <div id={detailId} className="job-expanded" hidden={!isExpanded}>
+            <section className="matched-searches" aria-label="Saved search criteria connected to this posting">
+              <h3>Saved search criteria</h3>
+              <div className="criteria-list">{savedSearches.map(search => {
+                const query = search.query.trim(), location = search.location.trim();
+                return <span className="criteria-chip" key={search.id}><Search size={13} aria-hidden="true" />{[query || (location ? '' : 'Broad search'), location].filter(Boolean).join(' · ')}</span>;
+              })}</div>
+            </section>
+            <div className="expanded-job-meta"><div className="match-score" title="Compared locally with your skills and education"><b>{comparison.score}%</b><span>{comparison.basis}</span></div><span className="results-meta">Compared on this device using your skills and education.</span></div>
+            <div className="expanded-description"><h3>Job description</h3><p className="job-description">{job.description || 'No description is available from this source.'}</p></div>
             {job.skills.length > 0 && <div className="tag-row" aria-label="Listing skills">{job.skills.slice(0, 8).map((skill, i) => <span className={`tag ${comparison.overlap.includes(skill.toLocaleLowerCase()) ? 'matched' : ''}`} key={`${skill}-${i}`}>{skill}</span>)}</div>}
-            {profile.skills.length > 0 || profile.education ? <div className="results-meta comparison-line" data-testid={`text-comparison-${search.id}-${job.id}`}>{comparison.overlap.length ? `In common: ${comparison.overlap.slice(0, 6).join(', ')}` : 'No profile terms found in this listing'} · compared on this device</div> : null}
-            {comparison.requirements.length > 0 && <div className="requirement-breakdown" data-testid={`list-requirements-${search.id}-${job.id}`}><h4>Requirement check <span>{comparison.requirements.filter(x => x.found.length).length} of {comparison.requirements.length} found</span></h4><div className="requirement-list">{comparison.requirements.slice(0, 8).map((item, i) => <div className={`requirement-item ${item.found.length ? 'matched' : ''}`} key={`${item.label}-${i}`} data-testid={`requirement-${search.id}-${job.id}-${i}`}><span className="requirement-mark">{item.found.length ? '✓' : '—'}</span><span className="requirement-text">{item.label}{item.found.length > 0 && <small>Profile terms: {item.found.slice(0, 4).join(', ')}</small>}</span><span className="requirement-status">{!comparison.hasProfile ? 'Add profile details' : item.found.length ? 'Found in profile' : 'Not found in profile'}</span></div>)}</div><p className="requirement-note">A keyword overlap is a clue, not a verdict. Review the full listing.</p></div>}
+            {profile.skills.length > 0 || profile.education ? <div className="results-meta comparison-line" data-testid={`text-comparison-${index}`}>{comparison.overlap.length ? `In common: ${comparison.overlap.slice(0, 6).join(', ')}` : 'No profile terms found in this listing'} · compared on this device</div> : null}
+            {comparison.requirements.length > 0 && <div className="requirement-breakdown" data-testid={`list-requirements-${index}`}><h4>Requirement check <span>{comparison.requirements.filter(x => x.found.length).length} of {comparison.requirements.length} found</span></h4><div className="requirement-list">{comparison.requirements.slice(0, 8).map((item, i) => <div className={`requirement-item ${item.found.length ? 'matched' : ''}`} key={`${item.label}-${i}`} data-testid={`requirement-${index}-${i}`}><span className="requirement-mark">{item.found.length ? '✓' : '—'}</span><span className="requirement-text">{item.label}{item.found.length > 0 && <small>Profile terms: {item.found.slice(0, 4).join(', ')}</small>}</span><span className="requirement-status">{!comparison.hasProfile ? 'Add profile details' : item.found.length ? 'Found in profile' : 'Not found in profile'}</span></div>)}</div><p className="requirement-note">A keyword overlap is a clue, not a verdict. Review the full listing.</p></div>}
             {comparison.requirements.length === 0 && <p className="requirement-note">{job.contentDepth === 'excerpt' ? 'This listing is an excerpt; requirements may not be included.' : 'No structured requirements were found.'} Review the original listing.</p>}
-            <div className="job-foot"><span className="source-label">{job.sourceNames.join(' · ') || 'Job source'} · {job.contentDepth === 'full' ? 'Full description' : 'Excerpt'}</span><a className="job-link" href={job.sourceUrl} target="_blank" rel="noreferrer noopener" data-testid={`link-original-job-${search.id}-${job.id}`}>Original listing <ArrowUpRight size={14} /></a></div>
-          </article>)}</div>
-        </section>;
-      })}
+            <div className="job-foot"><span className="source-label">{job.sourceNames.join(' · ') || 'Job source'} · {job.contentDepth === 'full' ? 'Full description' : 'Excerpt'}</span><a className="job-link" href={job.sourceUrl} target="_blank" rel="noreferrer noopener" data-testid={`link-original-job-${index}`}>Original listing <ArrowUpRight size={14} /></a></div>
+          </div>
+        </article>;
+      })}</div>}
     </section>
     {sourceQuery.isError && <div className="quiet-footnote">Source status is temporarily unavailable. <button className="inline-button" onClick={() => sourceQuery.refetch()}>Retry</button></div>}
   </>;
