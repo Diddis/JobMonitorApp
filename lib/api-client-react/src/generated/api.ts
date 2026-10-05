@@ -24,9 +24,7 @@ import type {
   HealthStatus,
   JobSearchInput,
   JobSearchResult,
-  JobSource,
-  ResumeImportResult,
-  ResumeUploadInput
+  JobSource
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -297,81 +295,5 @@ export const useSearchJobs = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSearchJobsMutationOptions(options));
-    }
-
-export const getImportResumeUrl = () => {
-
-
-
-
-  return `/api/jobs/resume-import`
-}
-
-/**
- * @summary Extract text from an uploaded CV without retaining the file
- */
-export const importResume = async (resumeUploadInput: ResumeUploadInput, options?: Parameters<typeof customFetch>[1]): Promise<ResumeImportResult> => {
-    const formData = new FormData();
-formData.append(`file`, resumeUploadInput.file);
-
-  return customFetch<ResumeImportResult>(getImportResumeUrl(),
-  {
-    ...options,
-    method: 'POST'
-    ,
-    body: formData
-  }
-);}
-
-
-
-
-
-export const getImportResumeMutationKey = () => ['importResume'] as const;
-
-export const getImportResumeMutationOptions = <TError = ErrorType<ApiError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importResume>>, TError,ImportResumeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof importResume>>, TError,ImportResumeMutationVariables, TContext> => {
-
-const mutationKey = getImportResumeMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importResume>>, ImportResumeMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  importResume(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ImportResumeMutationResult = NonNullable<Awaited<ReturnType<typeof importResume>>>
-    export type ImportResumeMutationBody = BodyType<ResumeUploadInput>
-    export type ImportResumeMutationError = ErrorType<ApiError>
-    export type ImportResumeMutationVariables = {data: BodyType<ResumeUploadInput>}
-
-    /**
- * @summary Extract text from an uploaded CV without retaining the file
- */
-export const useImportResume = <TError = ErrorType<ApiError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importResume>>, TError,ImportResumeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof importResume>>,
-        TError,
-        ImportResumeMutationVariables,
-        TContext
-      > => {
-      return useMutation(getImportResumeMutationOptions(options));
     }
 

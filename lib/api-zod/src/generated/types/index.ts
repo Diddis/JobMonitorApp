@@ -17,5 +17,3 @@ export * from './jobSource';
 export * from './jobSourceId';
 export * from './jobSourceResult';
 export * from './jobSourceResultStatus';
-export * from './resumeImportResult';
-export * from './resumeUploadInput';

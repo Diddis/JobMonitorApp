@@ -107,17 +107,6 @@ export interface JobSearchResult {
   partial: boolean;
 }
 
-export interface ResumeUploadInput {
-  file: Blob;
-}
-
-export interface ResumeImportResult {
-  filename: string;
-  extractedText: string;
-  wordCount: number;
-  retained: false;
-}
-
 export interface ApiError {
   error: string;
 }

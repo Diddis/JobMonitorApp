@@ -81,18 +81,3 @@ export const SearchJobsResponse = zod.object({
 })
 
 
-/**
- * @summary Extract text from an uploaded CV without retaining the file
- */
-export const ImportResumeBody = zod.object({
-  "file": zod.instanceof(Blob)
-})
-
-export const ImportResumeResponse = zod.object({
-  "filename": zod.string(),
-  "extractedText": zod.string(),
-  "wordCount": zod.number().int(),
-  "retained": zod.literal(false)
-})
-
-
