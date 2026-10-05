@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -21,7 +21,7 @@
   --card: 44 38% 99%; --card-foreground: 174 24% 18%; --primary: 169 34% 29%; --primary-foreground: 45 42% 97%;
   --secondary: 38 26% 90%; --secondary-foreground: 174 24% 18%; --muted: 39 23% 91%; --muted-foreground: 171 10% 43%;
   --accent: 15 48% 62%; --accent-foreground: 174 25% 16%; --destructive: 4 57% 47%; --destructive-foreground: 45 42% 97%;
-  --ring: 169 34% 29%; --radius: 1rem; --app-font-sans: 'DM Sans', sans-serif; --app-font-serif: 'Instrument Serif', Georgia, serif; --app-font-mono: 'IBM Plex Mono', monospace;
+  --ring: 169 34% 29%; --radius: 1rem; --app-font-sans: 'Atkinson Hyperlegible', Arial, sans-serif; --app-font-serif: 'Instrument Serif', Georgia, serif; --app-font-mono: 'IBM Plex Mono', monospace;
 }
 .dark {
   --background: 174 22% 12%; --foreground: 42 32% 91%; --border: 172 13% 26%; --input: 172 13% 26%;
@@ -90,4 +90,25 @@ button,input,textarea,select { font:inherit; } button { cursor:pointer; }
  .matches-page-head { align-items:flex-start;flex-direction:column;gap:9px;margin-bottom:19px; }.matches-page-actions { width:100%;justify-content:space-between; }.matches-page-actions .results-meta { text-align:left; }
   .job-card-toggle { padding:17px; }.job-expanded { padding:15px 17px 18px; }.job-title { font-size:23px; }.job-card .job-top { gap:8px; }.job-expand-cue { font-size:9px; }.job-card .job-meta { gap:7px 12px; }.expanded-job-meta { align-items:flex-start;flex-direction:column; }.requirement-breakdown h4 { align-items:flex-start;flex-direction:column;gap:4px; }.requirement-item { grid-template-columns:16px minmax(0,1fr); }.requirement-status { grid-column:2;text-align:left;white-space:normal; }
   .profile-main,.settings-section { padding:19px; }.profile-section-head { flex-direction:column; }.skill-edit { align-items:stretch; }.add-search-form { grid-template-columns:1fr; }.add-search-button { width:100%; }.feed-add { grid-template-columns:1fr; }.job-foot { align-items:flex-start;flex-direction:column; }
+}
+
+/* Readability: use a legibility-focused sans for interface copy and enlarge small text. */
+body { font-size:16px;line-height:1.6; }
+.brand-note,.nav-label,.eyebrow,.results-meta,.refresh-state,.job-expand-cue,.match-score,.requirement-status,.footnote,.local-badge,.section-index,.saved-number,.field label { font-size:11px; }
+.nav-link { font-size:14px; }
+.privacy-note,.hint,.skill-chip,.quiet-footnote { font-size:12px; }
+.page-intro,.section-copy,.settings-heading p,.state-box p,.source-setting small,.saved-setting-copy small,.inline-empty,.feed-item,.radio-option span,.privacy-strip,.alert { font-size:14px; }
+.button { font-size:14px; }.button.small { font-size:12px; }
+.job-company,.job-card .job-meta,.requirement-item,.saved-setting-copy strong { font-size:13px; }
+.job-preview,.job-description,.expanded-description .job-description { font-size:14px;line-height:1.7; }
+.job-expand-cue { font-size:11px; }
+.tag,.requirement-note,.source-label { font-size:11px; }
+.job-link { font-size:12px; }
+.requirement-breakdown h4,.requirement-text small { font-size:12px; }
+.source-setting strong { font-size:14px; }
+.control { font-size:15px; }
+
+@media (max-width:700px) {
+  .nav-link { font-size:12px; }
+  .page-intro { font-size:14px; }
 }
