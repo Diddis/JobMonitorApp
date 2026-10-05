@@ -8,7 +8,8 @@ import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
 const KEYS = { preferences: 'nordjobb.preferences.v1', profile: 'nordjobb.profile.v1', search: 'nordjobb.search.v1', searches: 'nordjobb.searches.v1', results: 'nordjobb.results.v1' };
-type Preferences = { sourceIds: string[]; feeds: string[]; refreshMinutes: number; refreshScheduleVersion?: number };
+type SavedFeed = { url: string; source: string };
+type Preferences = { sourceIds: string[]; feeds: SavedFeed[]; refreshMinutes: number; refreshScheduleVersion?: number };
 type Profile = { skills: string[]; education: string };
 type SavedSearch = { id: string; query: string; location: string };
 type SearchCache = Record<string, JobSearchResult>;
@@ -19,8 +20,20 @@ function read<T>(key: string, fallback: T): T {
   try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
 }
 function save(key: string, value: unknown) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Browser storage can be unavailable. */ } }
+function normalizeSavedFeeds(value: unknown): SavedFeed[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(item => {
+    if (typeof item === 'string') return [{ url: item, source: '' }];
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const feed = item as Record<string, unknown>;
+    return typeof feed.url === 'string'
+      ? [{ url: feed.url, source: typeof feed.source === 'string' ? feed.source : '' }]
+      : [];
+  });
+}
 function loadPreferences(): Preferences {
-  const p = { ...DEFAULT_PREFS, ...read<Partial<Preferences>>(KEYS.preferences, {}) };
+  const saved = read<Partial<Preferences> & { feeds?: unknown }>(KEYS.preferences, {});
+  const p = { ...DEFAULT_PREFS, ...saved, feeds: normalizeSavedFeeds(saved.feeds) };
   if (p.refreshScheduleVersion === undefined) { p.refreshMinutes = p.refreshMinutes === 0 ? 60 : p.refreshMinutes; p.refreshScheduleVersion = 1; }
   return p;
 }
@@ -48,6 +61,14 @@ function dateLabel(value?: string | null) {
   if (!value) return 'Not stated';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-SE', { dateStyle: 'medium' }).format(date);
+}
+function feedHost(value: string) {
+  try {
+    const candidate = value.includes('://') ? value : `https://${value}`;
+    return new URL(candidate).hostname.replace(/^www\./i, '').toLowerCase();
+  } catch {
+    return value.trim().replace(/^www\./i, '').toLowerCase();
+  }
 }
 function normalizeDescription(value?: string | null) {
   const description = (value ?? '')
@@ -150,7 +171,7 @@ function HomePage() {
     if (!sourceIds.length) { setSourceError('Choose at least one job source in Search settings.'); setStates(s => ({ ...s, [item.id]: 'error' })); flights.current.delete(item.id); return; }
     setSourceError('');
     setStates(s => ({ ...s, [item.id]: 'loading' }));
-    const input: JobSearchInput = { query: item.query.trim() || undefined, location: item.location.trim() || undefined, sourceIds: sourceIds as JobSearchInput['sourceIds'], customFeedUrls: config.feeds, limit: 30 };
+    const input: JobSearchInput = { query: item.query.trim() || undefined, location: item.location.trim() || undefined, sourceIds: sourceIds as JobSearchInput['sourceIds'], customFeedUrls: config.feeds.map(feed => feed.url), limit: 30 };
     try {
       const result = await mutateRef.current({ data: input });
       if (!searchRef.current.some(s => s.id === item.id)) return;
@@ -183,7 +204,28 @@ function HomePage() {
       }
     }
   }
-  const allJobs = [...merged.values()].sort((a, b) => {
+  const feedSourcesByHost = new Map<string, string>();
+  for (const feed of prefs.feeds) {
+    const source = feed.source.trim();
+    if (source) feedSourcesByHost.set(feedHost(feed.url), source);
+  }
+  const allJobs = [...merged.values()].map(entry => {
+    const isCustomFeed = entry.job.sourceIds.includes('custom-feed');
+    const customSource = isCustomFeed
+      ? entry.job.sourceNames.map(name => feedSourcesByHost.get(feedHost(name))).find(source => source !== undefined)
+      : undefined;
+    const sourceNames = isCustomFeed
+      ? entry.job.sourceNames.map(name => feedSourcesByHost.get(feedHost(name)) ?? name)
+      : entry.job.sourceNames;
+    return {
+      ...entry,
+      job: {
+        ...entry.job,
+        employer: entry.job.employer || customSource || null,
+        sourceNames,
+      },
+    };
+  }).sort((a, b) => {
     const aDate = a.job.publishedAt ? Date.parse(a.job.publishedAt) : 0;
     const bDate = b.job.publishedAt ? Date.parse(b.job.publishedAt) : 0;
     return (Number.isFinite(bDate) ? bDate : 0) - (Number.isFinite(aDate) ? aDate : 0);
@@ -271,6 +313,7 @@ function SettingsPage() {
   const [searches, setSearches] = useState<SavedSearch[]>(loadSearches);
   const [draft, setDraft] = useState({ query: '', location: '' });
   const [feed, setFeed] = useState('');
+  const [feedSource, setFeedSource] = useState('');
   const [error, setError] = useState('');
   useEffect(() => { save(KEYS.preferences, prefs); }, [prefs]);
   useEffect(() => { save(KEYS.searches, searches); }, [searches]);
@@ -290,11 +333,13 @@ function SettingsPage() {
   const addFeed = (e: FormEvent) => {
     e.preventDefault();
     try {
-      const url = new URL(feed.trim());
+      const feedUrl = feed.trim();
+      const source = feedSource.trim();
+      const url = new URL(feedUrl);
       if (!['https:', 'http:'].includes(url.protocol)) throw new Error();
-      if (prefs.feeds.includes(feed.trim())) { setError('That feed is already saved.'); return; }
+      if (prefs.feeds.some(item => item.url === feedUrl)) { setError('That feed is already saved.'); return; }
       if (prefs.feeds.length >= 10) { setError('You can add up to 10 feeds.'); return; }
-      setPrefs(p => ({ ...p, feeds: [...p.feeds, feed.trim()] })); setFeed(''); setError('');
+      setPrefs(p => ({ ...p, feeds: [...p.feeds, { url: feedUrl, source }] })); setFeed(''); setFeedSource(''); setError('');
     } catch { setError('Enter a valid http or https RSS / Atom feed URL.'); }
   };
   const intervals = [{ value: 0, label: 'Manual only' }, { value: 15, label: '15 min' }, { value: 30, label: '30 min' }, { value: 60, label: '1 hour' }, { value: 240, label: '4 hours' }];
@@ -313,9 +358,17 @@ function SettingsPage() {
       {sources.map(source => <label className="source-setting" key={source.id}><span><strong>{source.name}</strong><small>{source.description}{source.contentNote ? ` ${source.contentNote}` : ''}</small></span><input className="switch" type="checkbox" aria-label={`Select ${source.name}`} checked={prefs.sourceIds.includes(source.id)} onChange={e => setPrefs(p => ({ ...p, sourceIds: e.target.checked ? [...new Set([...p.sourceIds, source.id])] : p.sourceIds.filter(id => id !== source.id) }))} data-testid={`toggle-settings-source-${source.id}`} /></label>)}
       {!sourceQuery.isLoading && !sourceQuery.isError && !sources.length && <div className="inline-empty">No job sources are available right now.</div>}
     </section>
-    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">03</span><div><h2>RSS &amp; Atom feeds</h2><p>Include up to ten feeds from organisations and job boards you trust.</p></div></div>
-      <form className="feed-add" onSubmit={addFeed}><input className="control" aria-label="Feed URL" placeholder="https://organisation.se/jobs/feed.xml" value={feed} onChange={e => setFeed(e.target.value)} data-testid="input-feed-url" /><button className="button secondary" type="submit" data-testid="button-add-feed"><Plus size={15} />Add feed</button></form>
-      {prefs.feeds.map((url, i) => <div className="feed-item" key={url}><span><Rss size={14} />{url}</span><button className="icon-action" type="button" aria-label={`Remove feed ${url}`} onClick={() => setPrefs(p => ({ ...p, feeds: p.feeds.filter((_, index) => index !== i) }))} data-testid={`button-remove-feed-${i}`}><Trash2 size={14} /></button></div>)}
+    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">03</span><div><h2>RSS &amp; Atom feeds</h2><p>Add a source name to use as the employer when a feed entry doesn’t provide one.</p></div></div>
+      <form className="feed-add" onSubmit={addFeed}>
+        <div className="field"><label htmlFor="custom-feed-url">Feed URL</label><input id="custom-feed-url" className="control" placeholder="https://organisation.se/jobs/feed.xml" value={feed} onChange={e => setFeed(e.target.value)} data-testid="input-feed-url" /></div>
+        <div className="field"><label htmlFor="custom-feed-source">Source (optional)</label><input id="custom-feed-source" className="control" maxLength={120} placeholder="Used if an item has no employer" value={feedSource} onChange={e => setFeedSource(e.target.value)} data-testid="input-feed-source" /></div>
+        <button className="button secondary" type="submit" data-testid="button-add-feed"><Plus size={15} />Add feed</button>
+      </form>
+      {prefs.feeds.map((item, i) => <div className="feed-item" key={item.url}>
+        <span><Rss size={14} />{item.url}</span>
+        <input className="control feed-source-control" aria-label={`Source for ${item.url}`} maxLength={120} placeholder="Source / employer fallback" value={item.source} onChange={e => setPrefs(p => ({ ...p, feeds: p.feeds.map((feed, index) => index === i ? { ...feed, source: e.target.value } : feed) }))} data-testid={`input-edit-feed-source-${i}`} />
+        <button className="icon-action" type="button" aria-label={`Remove feed ${item.url}`} onClick={() => setPrefs(p => ({ ...p, feeds: p.feeds.filter((_, index) => index !== i) }))} data-testid={`button-remove-feed-${i}`}><Trash2 size={14} /></button>
+      </div>)}
       {!prefs.feeds.length && <div className="inline-empty">No custom feeds added. Built-in sources work independently.</div>}
     </section>
     <section className="panel settings-section"><div className="settings-heading"><span className="section-index">04</span><div><h2>Refresh schedule</h2><p>Automatic checks happen on this device while Nordjobb is open.</p></div></div>
