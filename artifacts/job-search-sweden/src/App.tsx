@@ -77,8 +77,8 @@ function AppShell({ children }: { children: ReactNode }) {
       <div className="nav-label">Workspace</div>
       <nav className="nav-list" aria-label="Main navigation">
         <Link href="/" className={`nav-link ${active === 'search' ? 'active' : ''}`} data-testid="link-search"><Search size={17} />Job matches</Link>
-        <Link href="/profile" className={`nav-link ${active === 'profile' ? 'active' : ''}`} data-testid="link-profile"><UserRound size={17} />Your profile</Link>
         <Link href="/settings" className={`nav-link ${active === 'settings' ? 'active' : ''}`} data-testid="link-settings"><Settings2 size={17} />Search settings</Link>
+        <Link href="/profile" className={`nav-link ${active === 'profile' ? 'active' : ''}`} data-testid="link-profile"><UserRound size={17} />Your profile</Link>
       </nav>
       <div className="side-bottom"><div className="privacy-note"><span className="privacy-dot" />Your profile stays on this device. It is never sent with a job search.</div></div>
     </aside>
