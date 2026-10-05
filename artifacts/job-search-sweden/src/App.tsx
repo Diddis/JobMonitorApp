@@ -49,6 +49,16 @@ function dateLabel(value?: string | null) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-SE', { dateStyle: 'medium' }).format(date);
 }
+function normalizeDescription(value?: string | null) {
+  const description = (value ?? '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.replace(/[ \t]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return description || 'No description is available from this source.';
+}
 function timeLabel(value?: string) {
   if (!value) return 'Waiting for first refresh';
   const date = new Date(value);
@@ -204,10 +214,11 @@ function HomePage() {
         const comparison = compareJob(job, profile);
         const isExpanded = expandedJobs.has(key);
         const detailId = `job-details-${index}`;
+        const description = normalizeDescription(job.description);
         return <article className={`panel job-card ${isExpanded ? 'expanded' : ''}`} key={key} data-testid={`card-job-${index}`} style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}>
           <button className="job-card-toggle" type="button" aria-expanded={isExpanded} aria-controls={detailId} aria-label={`${isExpanded ? 'Hide' : 'Show'} details for ${job.title}`} onClick={() => setExpandedJobs(current => { const next = new Set(current); isExpanded ? next.delete(key) : next.add(key); return next; })}>
             <span className="job-top"><span className="job-heading-copy"><span className="job-title" role="heading" aria-level={2}>{job.title}</span><span className="job-company">{job.employer || 'Employer not listed'}</span></span><span className="job-expand-cue">{isExpanded ? 'Hide details' : 'View details'}<ChevronDown size={15} aria-hidden="true" /></span></span>
-            <span className="job-preview">{job.description || 'No description is available from this source.'}</span>
+            <span className="job-preview">{description}</span>
             <span className="job-meta">{job.location && <span><MapPin size={13} />{job.location}</span>}{job.employmentType && <span><BriefcaseBusiness size={13} />{job.employmentType}</span>}{job.publishedAt && <span><CalendarDays size={13} />Published {dateLabel(job.publishedAt)}</span>}<span><Clock3 size={13} />Deadline {dateLabel(job.deadline)}</span></span>
           </button>
           <div id={detailId} className="job-expanded" hidden={!isExpanded}>
@@ -219,7 +230,7 @@ function HomePage() {
               })}</div>
             </section>
             <div className="expanded-job-meta"><div className="match-score" title="Compared locally with your skills and education"><b>{comparison.score}%</b><span>{comparison.basis}</span></div><span className="results-meta">Compared on this device using your skills and education.</span></div>
-            <div className="expanded-description"><h3>Job description</h3><p className="job-description">{job.description || 'No description is available from this source.'}</p></div>
+            <div className="expanded-description"><h3>Job description</h3><p className="job-description">{description}</p></div>
             {job.skills.length > 0 && <div className="tag-row" aria-label="Listing skills">{job.skills.slice(0, 8).map((skill, i) => <span className={`tag ${comparison.overlap.includes(skill.toLocaleLowerCase()) ? 'matched' : ''}`} key={`${skill}-${i}`}>{skill}</span>)}</div>}
             {profile.skills.length > 0 || profile.education ? <div className="results-meta comparison-line" data-testid={`text-comparison-${index}`}>{comparison.overlap.length ? `In common: ${comparison.overlap.slice(0, 6).join(', ')}` : 'No profile terms found in this listing'} · compared on this device</div> : null}
             {comparison.requirements.length > 0 && <div className="requirement-breakdown" data-testid={`list-requirements-${index}`}><h4>Requirement check <span>{comparison.requirements.filter(x => x.found.length).length} of {comparison.requirements.length} found</span></h4><div className="requirement-list">{comparison.requirements.slice(0, 8).map((item, i) => <div className={`requirement-item ${item.found.length ? 'matched' : ''}`} key={`${item.label}-${i}`} data-testid={`requirement-${index}-${i}`}><span className="requirement-mark">{item.found.length ? '✓' : '—'}</span><span className="requirement-text">{item.label}{item.found.length > 0 && <small>Profile terms: {item.found.slice(0, 4).join(', ')}</small>}</span><span className="requirement-status">{!comparison.hasProfile ? 'Add profile details' : item.found.length ? 'Found in profile' : 'Not found in profile'}</span></div>)}</div><p className="requirement-note">A keyword overlap is a clue, not a verdict. Review the full listing.</p></div>}

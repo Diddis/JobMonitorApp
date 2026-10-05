@@ -112,3 +112,11 @@ body { font-size:16px;line-height:1.6; }
   .nav-link { font-size:12px; }
   .page-intro { font-size:14px; }
 }
+
+/* Keep expanded sections on one spacing rhythm; avoid combining grid gaps with margins. */
+.job-expanded { gap:12px; }
+.job-expanded > * { margin-block:0; }
+.job-expanded .requirement-breakdown { padding-top:12px; }
+.job-expanded .requirement-breakdown .requirement-note { margin-top:8px; }
+.job-expanded .job-foot { padding-top:12px; }
+.expanded-description .job-description { white-space:pre-line; }
