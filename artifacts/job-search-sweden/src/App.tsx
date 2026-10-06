@@ -129,7 +129,7 @@ function AppShell({ children }: { children: ReactNode }) {
   const active = location === '/' ? 'search' : location.slice(1);
   return <div className="app-frame">
     <aside className="sidebar">
-      <Link href="/" className="brand" data-testid="link-home"><span className="brand-mark">n</span><span><span className="brand-name">nordjobb</span><span className="brand-note">keep posted</span></span></Link>
+      <Link href="/" className="brand" data-testid="link-home"><span className="brand-mark">J</span><span><span className="brand-name">JobMonitor</span><span className="brand-note">stay up to date</span></span></Link>
       <div className="nav-label">Workspace</div>
       <nav className="nav-list" aria-label="Main navigation">
         <Link href="/" className={`nav-link ${active === 'search' ? 'active' : ''}`} data-testid="link-search"><Search size={17} />Job matches</Link>
@@ -249,7 +249,7 @@ function HomePage() {
       {sourceError && <div className="alert" role="alert" data-testid="status-search-config">{sourceError} <Link href="/settings" className="inline-link">Open settings</Link></div>}
       {failedSearches.length > 0 && <div className="alert partial" role="status" data-testid="status-search-errors"><CircleAlert size={15} />Could not refresh: {failedSearches.map(search => [search.query, search.location].filter(Boolean).join(' · ') || 'Broad search').join('; ')}. Cached postings remain visible where available.</div>}
       {failedSources.length > 0 && <div className="alert partial" role="status" data-testid="status-source-errors"><CircleAlert size={15} />Some sources could not return results: {failedSources.slice(0, 3).join(' · ')}{failedSources.length > 3 ? ` · and ${failedSources.length - 3} more` : ''}</div>}
-      {!searches.length && <div className="panel state-box"><div className="empty-symbol"><Search size={19} /></div><h3>Your searches will appear here.</h3><p>Add a job title and location in Search settings. New opportunities will be gathered automatically while Nordjobb is open.</p><Link href="/settings" className="button">Set up a search</Link></div>}
+      {!searches.length && <div className="panel state-box"><div className="empty-symbol"><Search size={19} /></div><h3>Your searches will appear here.</h3><p>Add a job title and location in Search settings. New opportunities will be gathered automatically while JobMonitor is open.</p><Link href="/settings" className="button">Set up a search</Link></div>}
       {searches.length > 0 && allJobs.length === 0 && pendingCount > 0 && <div className="panel loading-lines" aria-label="Loading job postings"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" style={{ width: '72%' }} /></div>}
       {searches.length > 0 && allJobs.length === 0 && pendingCount === 0 && <div className="panel state-box"><div className="empty-symbol"><BriefcaseBusiness size={19} /></div><h3>No postings yet.</h3><p>Results from all your saved searches will appear together here.</p><button className="button quiet small" onClick={runAll}>Try again</button></div>}
       {allJobs.length > 0 && <div className="job-list">{allJobs.map(({ key, job, savedSearches }, index) => {
@@ -371,7 +371,7 @@ function SettingsPage() {
       </div>)}
       {!prefs.feeds.length && <div className="inline-empty">No custom feeds added. Built-in sources work independently.</div>}
     </section>
-    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">04</span><div><h2>Refresh schedule</h2><p>Nordjobb refreshes the search only when the app is open. Set the auto refresher time schedule.</p></div></div>
+    <section className="panel settings-section"><div className="settings-heading"><span className="section-index">04</span><div><h2>Refresh schedule</h2><p>JobMonitor refreshes the search only when the app is open. Set the auto refresher time schedule.</p></div></div>
       <div className="radio-row" role="radiogroup" aria-label="Automatic refresh interval">{intervals.map(choice => <label className="radio-option" key={choice.value}><input type="radio" name="refresh-interval" value={choice.value} checked={prefs.refreshMinutes === choice.value} onChange={() => setPrefs(p => ({ ...p, refreshMinutes: choice.value, refreshScheduleVersion: 1 }))} data-testid={`radio-refresh-${choice.value}`} /><span>{choice.label}</span></label>)}</div>
     </section>
     <div className="quiet-footnote"><ShieldCheck size={14} />Searches, profile details and settings are stored locally in this browser.</div>
