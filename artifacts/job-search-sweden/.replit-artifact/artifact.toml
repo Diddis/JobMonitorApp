@@ -36,10 +36,10 @@ localPort = 19479
 run = "mvn -f server/pom.xml spring-boot:run"
 
 [services.production.build]
-args = [ "mvn", "-f", "server/pom.xml", "-DskipTests", "package" ]
+args = [ "mvn", "-f", "artifacts/job-search-sweden/server/pom.xml", "-DskipTests", "package" ]
 
 [services.production.run]
-args = [ "java", "-jar", "server/target/sweden-job-search-server.jar" ]
+args = [ "java", "-jar", "artifacts/job-search-sweden/server/target/sweden-job-search-server.jar" ]
 
 [services.production.run.env]
 PORT = "19479"

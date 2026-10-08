@@ -129,7 +129,7 @@ function AppShell({ children }: { children: ReactNode }) {
   const active = location === '/' ? 'search' : location.slice(1);
   return <div className="app-frame">
     <aside className="sidebar">
-      <Link href="/" className="brand" data-testid="link-home"><span className="brand-mark">J</span><span><span className="brand-name">JobMonitor</span><span className="brand-note">stay up to date</span></span></Link>
+      <Link href="/" className="brand" data-testid="link-home"><span className="brand-mark">J</span><span><span className="brand-name">JobMonitor</span><span className="brand-note">track new opportunities</span></span></Link>
       <div className="nav-label">Workspace</div>
       <nav className="nav-list" aria-label="Main navigation">
         <Link href="/" className={`nav-link ${active === 'search' ? 'active' : ''}`} data-testid="link-search"><Search size={17} />Job matches</Link>
