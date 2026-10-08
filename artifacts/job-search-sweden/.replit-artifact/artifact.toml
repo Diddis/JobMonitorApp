@@ -47,5 +47,5 @@ PORT = "19479"
 [services.env]
 PORT = "19479"
 
-[services.health.startup]
+[services.production.health.startup]
 path = "/api/jobs/sources"
