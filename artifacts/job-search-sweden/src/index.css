@@ -34,7 +34,10 @@
 button,input,textarea,select { font:inherit; } button { cursor:pointer; }
 .app-frame { min-height:100dvh; background:#f5f3eb; }
 .sidebar { width:244px; position:fixed; inset:0 auto 0 0; z-index:20; padding:28px 18px; background:#e9eee6; border-right:1px solid #d9dfd5; display:flex; flex-direction:column; }
+.brand-row { margin-bottom:36px; }
 .brand { display:flex; align-items:center; gap:11px; padding:0 10px 36px; color:#244d47; text-decoration:none; }
+.brand-row .brand { padding-bottom:0; }
+.app-reload-button { display:none; }
 .brand-mark { width:35px; height:35px; border-radius:12px 12px 12px 4px; color:#f7f4e9; background:#315f56; display:grid; place-items:center; font-family:var(--app-font-serif); font-size:21px; }
 .brand-name { display:block; font-family:var(--app-font-serif); font-size:25px; letter-spacing:-.03em; line-height:1; }
 .brand-note { display:block; font-family:var(--app-font-mono); font-size:9px; letter-spacing:.11em; text-transform:uppercase; color:#778980; margin-top:5px; }
@@ -85,7 +88,7 @@ button,input,textarea,select { font:inherit; } button { cursor:pointer; }
 @keyframes refresh-rotate { to { transform:rotate(360deg); } } @keyframes rise-in { from { opacity:0;transform:translateY(9px); } to { opacity:1;transform:translateY(0); } } @keyframes sheen { 0% { background-position:100% 0; } 100% { background-position:-100% 0; } }
 @media (max-width:950px) { .sidebar { width:210px; }.main-area { margin-left:210px;padding:34px 26px 55px; } }
 @media (max-width:700px) {
- .sidebar { position:static;width:auto;height:auto;padding:calc(14px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) 14px calc(18px + env(safe-area-inset-left));border-right:0;border-bottom:1px solid #d9dfd5;display:block; }.brand { padding:0; }.brand-mark { width:32px;height:32px; }.brand-name { font-size:22px; }.nav-label,.side-bottom { display:none; }.nav-list { display:flex;gap:4px;margin-top:13px; }.nav-link { padding:9px 11px;font-size:11px;flex:1;justify-content:center; }.nav-link svg { width:15px;height:15px; }
+ .sidebar { position:static;width:auto;height:auto;padding:calc(14px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) 14px calc(18px + env(safe-area-inset-left));border-right:0;border-bottom:1px solid #d9dfd5;display:block; }.brand-row { display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:0; }.brand { padding:0; }.brand-mark { width:32px;height:32px; }.brand-name { font-size:22px; }.app-reload-button { display:inline-flex;flex:none;white-space:nowrap; }.nav-label,.side-bottom { display:none; }.nav-list { display:flex;gap:4px;margin-top:13px; }.nav-link { padding:9px 11px;font-size:11px;flex:1;justify-content:center; }.nav-link svg { width:15px;height:15px; }
   .main-area { margin:0;padding:26px calc(17px + env(safe-area-inset-right)) calc(44px + env(safe-area-inset-bottom)) calc(17px + env(safe-area-inset-left)); }.page-head { margin-bottom:23px; }.page-title { font-size:45px; }.page-intro { font-size:13px; }
  .matches-page-head { align-items:flex-start;flex-direction:column;gap:9px;margin-bottom:19px; }.matches-page-actions { width:100%;justify-content:space-between; }.matches-page-actions .results-meta { text-align:left; }
   .job-card-toggle { padding:17px; }.job-expanded { padding:15px 17px 18px; }.job-title { font-size:23px; }.job-card .job-top { gap:8px; }.job-expand-cue { font-size:9px; }.job-card .job-meta { gap:7px 12px; }.expanded-job-meta { align-items:flex-start;flex-direction:column; }.requirement-breakdown h4 { align-items:flex-start;flex-direction:column;gap:4px; }.requirement-item { grid-template-columns:16px minmax(0,1fr); }.requirement-status { grid-column:2;text-align:left;white-space:normal; }

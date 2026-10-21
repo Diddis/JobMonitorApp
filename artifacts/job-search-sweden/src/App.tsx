@@ -124,12 +124,49 @@ function mergeListings(first: JobListing, second: JobListing): JobListing {
   };
 }
 
+async function checkForAppUpdate() {
+  if (!('serviceWorker' in navigator)) return;
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) return;
+
+  await Promise.race([
+    registration.update().catch(() => undefined),
+    new Promise<void>(resolve => window.setTimeout(resolve, 2500)),
+  ]);
+}
+
 function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
+  const [reloadingApp, setReloadingApp] = useState(false);
   const active = location === '/' ? 'search' : location.slice(1);
+  const reloadApp = async () => {
+    if (reloadingApp) return;
+    setReloadingApp(true);
+    try {
+      await checkForAppUpdate();
+    } catch {
+      // Reload even if the update check is unavailable or the device is offline.
+    } finally {
+      window.location.reload();
+    }
+  };
   return <div className="app-frame">
     <aside className="sidebar">
-      <Link href="/" className="brand" data-testid="link-home"><span className="brand-mark">J</span><span><span className="brand-name">JobMonitor</span><span className="brand-note">track new opportunities</span></span></Link>
+      <div className="brand-row">
+        <Link href="/" className="brand" data-testid="link-home"><span className="brand-mark">J</span><span><span className="brand-name">JobMonitor</span><span className="brand-note">track new opportunities</span></span></Link>
+        <button
+          type="button"
+          className="button quiet small app-reload-button"
+          onClick={() => void reloadApp()}
+          disabled={reloadingApp}
+          aria-label="Check for app updates and reload"
+          title="Check for app updates and reload"
+          data-testid="button-reload-app"
+        >
+          <RefreshCw size={14} className={reloadingApp ? 'refresh-turn' : undefined} />
+          <span>{reloadingApp ? 'Checking…' : 'Reload app'}</span>
+        </button>
+      </div>
       <div className="nav-label">Workspace</div>
       <nav className="nav-list" aria-label="Main navigation">
         <Link href="/" className={`nav-link ${active === 'search' ? 'active' : ''}`} data-testid="link-search"><Search size={17} />Job matches</Link>
