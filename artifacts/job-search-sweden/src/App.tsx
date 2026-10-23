@@ -144,8 +144,6 @@ function AppShell({ children }: { children: ReactNode }) {
     setReloadingApp(true);
     try {
       await checkForAppUpdate();
-    } catch {
-      // Reload even if the update check is unavailable or the device is offline.
     } finally {
       window.location.reload();
     }
