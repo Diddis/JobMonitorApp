@@ -49,3 +49,19 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Agent/conversation workspace data (not part of the application)
+.agents/
+.conversation/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Test and tool output
+coverage/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
