@@ -29,7 +29,7 @@ The user interface is built using **React** and **TypeScript** for robust compon
 * **Deployment:** The client application is configured as a Progressive Web App (PWA), allowing native-like installation on mobile and desktop devices.
 
 ### Development Note
-This application was built in Replit utilizing the Replit Agent. The agent was systematically guided on the specific technology stack, modular architecture, and functional views. Visual design elements (such as color schemes, typography, and component sizing) were independently selected by the AI agent during the initial phase.
+I built this application in Replit utilizing the Replit Agent. The agent was systematically guided on the specific technology stack, modular architecture, and functional views. While I have more familiarity with backend development, I left more of the frontend development to the AI agent. Visual design elements (such as color schemes, typography, and component sizing) were selected by the AI agent, and I adjusted them as needed based on user requirements and testing. 
 
 ---
 
