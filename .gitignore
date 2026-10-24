@@ -65,3 +65,12 @@ coverage/
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
+
+# Build output
+build/
+out/
+
+# Compiled Java packages
+*.jar
+*.war
+*.ear

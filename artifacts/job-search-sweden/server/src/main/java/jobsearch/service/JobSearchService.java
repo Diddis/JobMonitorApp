@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import org.springframework.stereotype.Service;
 import jobsearch.model.JobListing;
 import jobsearch.model.JobSearchInput;
 import jobsearch.model.JobSearchResult;
@@ -26,12 +25,12 @@ import jobsearch.model.JobSource;
 import jobsearch.model.JobSourceResult;
 
 /**
-  This class 
+  This class handles job search queries and returns job postings.
 **/
 @Service
 public class JobSearchService {
-  private static final String JOB_SEARCH_URL = "https://jobsearch.api.jobtechdev.se/search";
-  private static final String JOB_LINKS_URL = "https://links.api.jobtechdev.se/joblinks";
+  private static final String JOB_SEARCH_URL = "https://jobsearch.api.jobtechdev.se/search";   // public API from Arbetsförmedlingen's Platsbanken
+  private static final String JOB_LINKS_URL = "https://links.api.jobtechdev.se/joblinks";  // also public API from Arbetsförmedlingen, but with additional advertisements from other job boards
   private static final HttpClient HTTP = SystemTrustHttp.builder()
       .connectTimeout(Duration.ofSeconds(5))
       .followRedirects(HttpClient.Redirect.NORMAL)
@@ -70,9 +69,9 @@ public class JobSearchService {
   }
 
   /**
-  Method for ---
-  Cleans input then 
-  Parameter JobSearchInput is record of search
+  Method for handling the input of job search parameters.
+  Cleans input, checks and limits input.
+  Returns list of responses from all sources.
   **/
   public JobSearchResult search(JobSearchInput input) {
     String query = clean(input.query());
@@ -94,6 +93,8 @@ public class JobSearchService {
 
     List<JobListing> collected = new ArrayList<>();
     List<JobSourceResult> statuses = new ArrayList<>();
+
+    // handle each source
     if (sourceIds.contains("jobsearch")) {
       collect(statuses, collected, "jobsearch", "Platsbanken · JobSearch",
           () -> searchJobSearch(searchText, limit));
@@ -108,12 +109,16 @@ public class JobSearchService {
 
     boolean partial = statuses.stream().anyMatch(s -> s.status().equals("failed"));
 
+    // return list of postings
     List<JobListing> jobs = deduplicateAndSort(collected).stream().limit(limit).toList();
     return new JobSearchResult(jobs, statuses, Instant.now().toString(), partial);
   }
 
+  /**
+  Send query and return response for Platsbanken
+ **/
   private List<JobListing> searchJobSearch(String query, int limit) throws Exception {
-    JsonNode root = getJson(JOB_SEARCH_URL, query, limit);
+    JsonNode root = getJson(JOB_SEARCH_URL, query, limit);  // send query
     List<JobListing> jobs = new ArrayList<>();
     for (JsonNode hit : root.path("hits")) {
       String id = text(hit, "id");
@@ -171,8 +176,11 @@ public class JobSearchService {
     return jobs;
   }
 
+  /**
+  Send query and return responses for JobAdLinks
+  **/
   private List<JobListing> searchJobAdLinks(String query, int limit) throws Exception {
-    JsonNode root = getJson(JOB_LINKS_URL, query, Math.min(100, limit));
+    JsonNode root = getJson(JOB_LINKS_URL, query, Math.min(100, limit));  // send query
     List<JobListing> jobs = new ArrayList<>();
     for (JsonNode hit : root.path("hits")) {
       String title = first(text(hit, "headline"), text(hit, "title"));
@@ -210,6 +218,9 @@ public class JobSearchService {
     return jobs;
   }
 
+  /**
+  Send an HTTP GET request and return the parsed JSON response.
+  **/
   private JsonNode getJson(String endpoint, String query, int limit) throws Exception {
     StringBuilder url = new StringBuilder(endpoint).append("?limit=").append(limit);
     if (query != null && !query.isBlank()) {
@@ -228,18 +239,20 @@ public class JobSearchService {
     return mapper.readTree(response.body());
   }
 
-  private void searchCustomFeeds(
-      List<String> urls,
-      int limit,
-      List<JobSourceResult> statuses,
-      List<JobListing> jobs
+  /**
+  Searches custom feed URl. 
+  Adds JobListing objects to jobs and a JobSourceResult object to statuses.
+  **/
+  private void searchCustomFeeds(List<String> urls, int limit, List<JobSourceResult> statuses, List<JobListing> jobs
   ) {
     if (urls.isEmpty()) {
       statuses.add(new JobSourceResult("custom-feed", "Custom RSS / Atom feeds", "skipped", 0, "No custom feeds added."));
       return;
     }
+    
     int added = 0;
     List<String> failures = new ArrayList<>();
+    
     for (String url : urls) {
       try {
         CustomFeedService.FeedResult result = customFeedService.fetch(url, limit);
@@ -252,9 +265,15 @@ public class JobSearchService {
     }
     String status = failures.isEmpty() ? "success" : "failed";
     String message = failures.isEmpty() ? null : String.join(" · ", failures);
+    
     statuses.add(new JobSourceResult("custom-feed", "Custom RSS / Atom feeds", status, added, message));
   }
 
+  /**
+  Helper method for collecting job postings from a source.
+  Successful results are added to the shared job list, while failures
+  are recorded in the source status list.
+  **/
   private void collect(
       List<JobSourceResult> statuses,
       List<JobListing> jobs,
@@ -271,8 +290,14 @@ public class JobSearchService {
     }
   }
 
+  /**
+  Remove duplicates, merge info from duplicate listings, and sort the
+  remaining jobs by publication date, newest first.
+  Try to use the URL to identify unique job postings, otherwise use 
+  title, employer and location.
+  **/
   private List<JobListing> deduplicateAndSort(List<JobListing> items) {
-    Map<String, JobListing> byKey = new LinkedHashMap<>();
+    Map<String, JobListing> byKey = new LinkedHashMap<>();  // map for storing unique jobs
     for (JobListing job : items) {
       String key = normalizedUrl(job.sourceUrl());
       if (key.isBlank()) {
@@ -287,6 +312,7 @@ public class JobSearchService {
         .toList();
   }
 
+  // Merge job listings
   private JobListing merge(JobListing first, JobListing second) {
     Set<String> ids = new LinkedHashSet<>(first.sourceIds());
     ids.addAll(second.sourceIds());

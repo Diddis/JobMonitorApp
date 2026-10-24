@@ -14,6 +14,14 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
+/**
+  Provides HTTP client builders configured with a custom SSL context that
+  combines trusted certificates from the Java trust store and the operating
+  system's CA certificate bundle.
+
+  Allows HTTPS connections to validate server certificates against both
+  sources of trusted certificate authorities.
+**/
 public final class SystemTrustHttp {
   private static final SSLContext SSL_CONTEXT = createSslContext();
 

@@ -27,6 +27,9 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import jobsearch.model.JobListing;
 
+/**
+  This class handles retrieving the RSS/Atom feed results
+**/
 @Service
 public class CustomFeedService {
   private static final int MAX_FEED_BYTES = 2 * 1024 * 1024;
